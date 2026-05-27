@@ -1,6 +1,6 @@
 {
   "name": "fetcharr",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "author": "James Furey (https://about.me/jamesfurey)",
   "description": "Fetch TV → Plex bridge",
   "license": "GPL-3.0-or-later",
@@ -57,7 +57,7 @@
     "express": "^4.19.2",
     "express-rate-limit": "^7.4.0",
     "fast-xml-parser": "^4.5.5",
-    "fetchtv": "1.7.3",
+    "fetchtv": "1.7.4",
     "filesize": "^10.1.0",
     "fuse.js": "^7.0.0",
     "helmet": "^8.0.0",
