@@ -178,6 +178,7 @@ const doSync = async ({ syncId, trigger, showId = null }) => {
 const processItem = async ({ item, show, mediaRoot }) => {
   const existing = await db('recordings').where({ fetch_id: String(item.id) }).first()
   if (existing?.status === 'done') return 'skipped'
+  if (existing?.deleted_from_fetch_at) return 'skipped'
 
   if (await isCurrentlyRecording(item)) {
     const recoveredSize = item.size === FETCH_DLNA_STALE_SENTINEL

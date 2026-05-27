@@ -210,7 +210,10 @@ app.delete('/api/recordings', doubleCsrfProtection, async (req, res) => {
   if (req.query.deleted !== 'true') {
     return res.status(400).json({ error: 'refusing bulk delete without ?deleted=true' })
   }
-  const n = await db('recordings').whereNotNull('deleted_from_fetch_at').delete()
+  const n = await db('recordings')
+    .whereNotNull('deleted_from_fetch_at')
+    .whereNull('purged_at')
+    .update({ purged_at: new Date().toISOString() })
   res.json({ ok: true, deleted: n })
 })
 
@@ -221,7 +224,9 @@ app.delete('/api/recordings/:fetch_id', doubleCsrfProtection, async (req, res) =
   if (!row.deleted_from_fetch_at) {
     return res.status(409).json({ error: 'recording still on Fetch — delete from box first' })
   }
-  await db('recordings').where({ fetch_id: fetchId }).delete()
+  await db('recordings')
+    .where({ fetch_id: fetchId })
+    .update({ purged_at: new Date().toISOString() })
   res.json({ ok: true })
 })
 
@@ -259,6 +264,7 @@ app.get('/api/recordings', async (req, res) => {
   const groupTombstonesLast = req.query.deleted !== 'deleted'
 
   const applyFilters = (q) => {
+    q.whereNull('recordings.purged_at')
     if (isRecordingVirtual) {
       q.where('recordings.status', 'skipped').where('recordings.error', 'currently recording')
     } else if (statusFilter) {
