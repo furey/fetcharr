@@ -370,18 +370,20 @@ const DashboardView = {
       </section>
 
       <section class="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <article class="panel p-5">
+        <a href="#/shows" class="panel p-5 block text-ink hover:text-ink no-hover-underline hover:border-signal-magenta transition-colors">
           <div class="text-xs font-mono uppercase tracking-[0.16em] text-ink-dim mb-2">Shows</div>
           <div class="text-4xl font-mono text-ink">{{ showCount }}</div>
           <div class="text-xs text-ink-dim mt-2">
             <span class="text-plex-yellow">{{ showEnabledCount }}</span> enabled
           </div>
-        </article>
-        <article class="panel p-5">
+        </a>
+        <a href="#/recordings" class="panel p-5 block text-ink hover:text-ink no-hover-underline hover:border-signal-magenta transition-colors">
           <div class="text-xs font-mono uppercase tracking-[0.16em] text-ink-dim mb-2">Recordings 7d</div>
           <div class="text-4xl font-mono text-ink">{{ recordings7dCount }}</div>
-          <div class="text-xs text-ink-dim mt-2">{{ recordingsTotal }} in window</div>
-        </article>
+          <div class="text-xs text-ink-dim mt-2">
+            <span class="text-plex-yellow">{{ recordingsTotal }}</span> in window
+          </div>
+        </a>
         <article class="panel p-5">
           <div class="text-xs font-mono uppercase tracking-[0.16em] text-ink-dim mb-2">Fetch Cloud</div>
           <div class="text-lg font-mono" :class="cloudClass">{{ cloudLabel }}</div>
@@ -924,6 +926,11 @@ const RecordingsView = {
           <span class="panel-title">RECORDINGS · {{ rangeLabel }} of {{ total }}</span>
           <div class="flex items-center gap-3">
             <span v-if="flashText" :class="['status-readout', flashKind]">{{ flashText }}</span>
+            <button type="button" class="btn btn-sm btn-danger" @click="purgeDeleted"
+              :disabled="purging"
+              title="Remove all tombstoned rows from Fetcharr's history (recordings already deleted from the Fetch TV box).">
+              {{ purging ? 'PURGING…' : '⨯ PURGE DELETED' }}
+            </button>
             <button type="button" class="btn btn-sm" @click="manualRefresh">↻ REFRESH</button>
           </div>
         </header>
@@ -981,8 +988,11 @@ const RecordingsView = {
                 <td class="font-mono">{{ se(r) }}</td>
                 <td class="font-mono whitespace-nowrap">{{ fmtBytes(r.size) }}</td>
                 <td>
-                  <span :class="['pill', r.status]">{{ r.status }}</span>
-                  <span v-if="r.error" class="block text-xs font-mono text-signal-magenta-hi mt-1">{{ r.error }}</span>
+                  <span v-if="isRecording(r)" class="pill recording">RECORDING</span>
+                  <template v-else>
+                    <span :class="['pill', r.status]">{{ r.status }}</span>
+                    <span v-if="r.error" class="block text-xs font-mono text-signal-magenta-hi mt-1">{{ r.error }}</span>
+                  </template>
                 </td>
                 <td class="font-mono whitespace-nowrap">{{ fmtTime(r.downloaded_at) }}</td>
                 <td>
@@ -990,6 +1000,14 @@ const RecordingsView = {
                     @click="deleteFromFetch(r)" :disabled="deletingId === r.fetch_id"
                     title="Delete this recording from the Fetch TV box. Irreversible.">
                     <span v-if="deletingId === r.fetch_id">…</span>
+                    <svg v-else viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M3 5h10M6.5 5V3h3v2M4.5 5l.7 8.5h5.6L11.5 5M6.5 7.5v4M9.5 7.5v4"/>
+                    </svg>
+                  </button>
+                  <button v-else-if="r.deleted_from_fetch_at" type="button" class="btn btn-sm btn-icon btn-danger"
+                    @click="removeRecording(r)" :disabled="removingId === r.fetch_id"
+                    title="Remove this tombstone from Fetcharr's history.">
+                    <span v-if="removingId === r.fetch_id">…</span>
                     <svg v-else viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                       <path d="M3 5h10M6.5 5V3h3v2M4.5 5l.7 8.5h5.6L11.5 5M6.5 7.5v4M9.5 7.5v4"/>
                     </svg>
@@ -1017,6 +1035,8 @@ const RecordingsView = {
     const recordings = ref([])
     const shows = ref([])
     const deletingId = ref(null)
+    const removingId = ref(null)
+    const purging = ref(false)
     const total = ref(0)
     const page = ref(1)
     const pageSize = ref(50)
@@ -1027,7 +1047,7 @@ const RecordingsView = {
     const sinceFilter = ref('all')
     const deletedFilter = ref('all')
 
-    const statusOptions = ['all', 'done', 'partial', 'failed', 'skipped', 'downloading']
+    const statusOptions = ['all', 'recording', 'done', 'partial', 'failed', 'skipped', 'downloading']
     const sinceOptions = [
       { key: 'all', label: 'ALL' },
       { key: '1h',  label: '1H'  },
@@ -1113,6 +1133,7 @@ const RecordingsView = {
     }
 
     const canDelete = (r) => r.status === 'done' && !r.deleted_from_fetch_at
+    const isRecording = (r) => r.status === 'skipped' && r.error === 'currently recording'
 
     const deleteFromFetch = async (r) => {
       const prompt = `Delete "${r.fetch_title}" from the Fetch TV box?\n\n`
@@ -1139,6 +1160,34 @@ const RecordingsView = {
       }
     }
 
+    const removeRecording = async (r) => {
+      if (!confirm(`Remove "${r.fetch_title}" from Fetcharr's history?`)) return
+      removingId.value = r.fetch_id
+      try {
+        await api('DELETE', `/api/recordings/${encodeURIComponent(r.fetch_id)}`)
+        flash({ msg: `Removed "${r.fetch_title}".` })
+        await refresh()
+      } catch (err) {
+        flash({ msg: `Remove failed: ${err.message}`, kind: 'err', ms: 6000 })
+      } finally {
+        removingId.value = null
+      }
+    }
+
+    const purgeDeleted = async () => {
+      if (!confirm('Purge all tombstoned recordings from Fetcharr\'s history?')) return
+      purging.value = true
+      try {
+        const r = await api('DELETE', '/api/recordings?deleted=true')
+        flash({ msg: `Purged ${r.deleted} tombstone${r.deleted === 1 ? '' : 's'}.` })
+        await refresh()
+      } catch (err) {
+        flash({ msg: `Purge failed: ${err.message}`, kind: 'err', ms: 6000 })
+      } finally {
+        purging.value = false
+      }
+    }
+
     let pollTimer = null
     onMounted(() => {
       loadShows()
@@ -1161,7 +1210,9 @@ const RecordingsView = {
       recordings, shows, total, page, pageSize, totalPages, rangeLabel,
       sortCol, sortDir, statusFilter, showFilter, sinceFilter, deletedFilter,
       statusOptions, sinceOptions, deletedOptions, hasFiltersApplied,
-      deletingId, refresh, manualRefresh, canDelete, deleteFromFetch,
+      deletingId, removingId, purging,
+      refresh, manualRefresh, canDelete, isRecording,
+      deleteFromFetch, removeRecording, purgeDeleted,
       setStatus, setShow, setSince, setDeleted, toggleSort, sortMarker,
       se: seasonEpisodeLabel, fmtBytes, fmtTime,
       flashText, flashKind,

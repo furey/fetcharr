@@ -206,6 +206,25 @@ app.post(
   },
 )
 
+app.delete('/api/recordings', doubleCsrfProtection, async (req, res) => {
+  if (req.query.deleted !== 'true') {
+    return res.status(400).json({ error: 'refusing bulk delete without ?deleted=true' })
+  }
+  const n = await db('recordings').whereNotNull('deleted_from_fetch_at').delete()
+  res.json({ ok: true, deleted: n })
+})
+
+app.delete('/api/recordings/:fetch_id', doubleCsrfProtection, async (req, res) => {
+  const fetchId = req.params.fetch_id
+  const row = await db('recordings').where({ fetch_id: fetchId }).first()
+  if (!row) return res.status(404).json({ error: 'recording not found' })
+  if (!row.deleted_from_fetch_at) {
+    return res.status(409).json({ error: 'recording still on Fetch — delete from box first' })
+  }
+  await db('recordings').where({ fetch_id: fetchId }).delete()
+  res.json({ ok: true })
+})
+
 app.get('/api/recordings', async (req, res) => {
   const SORT_COLUMNS = {
     downloaded_at: 'recordings.downloaded_at',
@@ -231,14 +250,20 @@ app.get('/api/recordings', async (req, res) => {
   const pageSize = Math.min(200, Math.max(10, parseInt(req.query.pageSize, 10) || 50))
   const sortColumn = SORT_COLUMNS[req.query.sort] || SORT_COLUMNS.downloaded_at
   const sortDir = req.query.dir === 'asc' ? 'asc' : 'desc'
+  const isRecordingVirtual = req.query.status === 'recording'
   const statusFilter = STATUS_VALUES.includes(req.query.status) ? req.query.status : null
   const showIdRaw = req.query.show_id ? Number(req.query.show_id) : null
   const showIdFilter = Number.isInteger(showIdRaw) ? showIdRaw : null
   const sinceInterval = SINCE_INTERVALS[req.query.since] || null
   const deletedClause = DELETED_FILTERS[req.query.deleted] || null
+  const groupTombstonesLast = req.query.deleted !== 'deleted'
 
   const applyFilters = (q) => {
-    if (statusFilter) q.where('recordings.status', statusFilter)
+    if (isRecordingVirtual) {
+      q.where('recordings.status', 'skipped').where('recordings.error', 'currently recording')
+    } else if (statusFilter) {
+      q.where('recordings.status', statusFilter)
+    }
     if (showIdFilter != null) q.where('recordings.show_id', showIdFilter)
     if (sinceInterval) {
       q.where('recordings.downloaded_at', '>=', db.raw(`datetime('now', '${sinceInterval}')`))
@@ -259,6 +284,10 @@ app.get('/api/recordings', async (req, res) => {
       'shows.fetch_show_pattern as show_pattern',
       'shows.dest_folder as show_dest_folder',
     )
+  if (groupTombstonesLast) {
+    rowsQuery.orderByRaw('(recordings.deleted_from_fetch_at IS NULL) DESC')
+  }
+  rowsQuery
     .orderBy(sortColumn, sortDir)
     .orderBy('recordings.season', 'desc')
     .orderBy('recordings.episode', 'desc')
