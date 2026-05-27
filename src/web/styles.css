@@ -258,6 +258,7 @@ table.deck-table tbody tr.tombstone .btn {
 .pill.done       { color: #e2b03c; }
 .pill.downloading{ color: #4ebef0; }
 .pill.running    { color: #4ebef0; }
+.pill.recording  { color: #f10c69; }
 .pill.ok         { color: #e2b03c; }
 .pill.partial    { color: #ffcd00; }
 .pill.failed     { color: #ff5c97; }
