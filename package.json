@@ -1,0 +1,52 @@
+{
+  "name": "fetcharr",
+  "version": "1.0.0",
+  "description": "Fetch TV → Plex bridge",
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=22.0.0",
+    "npm": ">=11.10.0"
+  },
+  "volta": {
+    "node": "22.19.0",
+    "npm": "11.15.0"
+  },
+  "scripts": {
+    "setup": "npm ci --ignore-scripts && npm run rebuild:natives && npm audit signatures",
+    "rebuild:natives": "npm rebuild --ignore-scripts=false better-sqlite3",
+    "migrate": "mkdir -p config && knex migrate:latest",
+    "migrate:refresh": "rm -f ./config/state.db && mkdir -p config && knex migrate:latest",
+    "prestart": "npm run migrate",
+    "start": "node src/server.js",
+    "predev": "npm run migrate",
+    "dev": "node --watch src/server.js",
+    "test": "node --test 'test/*.test.js'"
+  },
+  "dependencies": {
+    "axios": "^1.7.2",
+    "better-sqlite3": "^11.5.0",
+    "chalk": "^5.3.0",
+    "cli-progress": "^3.12.0",
+    "cli-table3": "^0.6.5",
+    "cookie-parser": "^1.4.7",
+    "csrf-csrf": "^3.0.6",
+    "debug": "^4.3.4",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.4.0",
+    "fast-xml-parser": "^4.4.0",
+    "fetchtv": "1.7.1",
+    "filesize": "^10.1.0",
+    "fuse.js": "^7.0.0",
+    "helmet": "^8.0.0",
+    "knex": "^3.1.0",
+    "lodash": "^4.17.21",
+    "node-cron": "^3.0.3",
+    "node-ssdp": "^4.0.1",
+    "pretty-ms": "^9.0.0",
+    "vue": "^3.5.13",
+    "ws": "8.20.1",
+    "yargs": "^17.7.2"
+  }
+}

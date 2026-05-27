@@ -1,0 +1,12 @@
+node_modules
+config
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+.env
+.git
+.gitignore
+README.md
+*.log
+.DS_Store
