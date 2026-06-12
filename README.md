@@ -141,42 +141,49 @@ This rebuilds the image and recreates the container only if the image actually c
 
 The Fetch TV box address and all integration credentials (Plex token, Fetch cloud activation code, etc.) are runtime settings; configure them in the web UI, not via env. The `.env` next to your compose file only carries deploy-level knobs:
 
-| Variable          | Purpose                                                                                                         |
-| ----------------- | --------------------------------------------------------------------------------------------------------------- |
-| `CONFIG_PATH`     | Host folder for Fetcharr's state database                                                                       |
-| `DATA_PATH`       | Host folder containing your Plex TV library (downloads land under `media/tv`)                                   |
+| Variable          | Purpose                                                                                                           |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `CONFIG_PATH`     | Host folder for Fetcharr's state database                                                                         |
+| `DATA_PATH`       | Host folder containing your Plex TV library (downloads land under `media/tv`)                                     |
 | `PLEX_PREFS_PATH` | Optional. Path to Plex's `Preferences.xml`, used by the Auto-detect token button; omit if Plex is on another host |
-| `CSRF_SECRET`     | 32+ random bytes (`openssl rand -hex 32`); required                                                             |
-| `TZ`              | Your IANA timezone (e.g. `Australia/Sydney`); the UI renders all timestamps in it                               |
-| `PUID`/`PGID`     | UID/GID to run as; match the owner of your bind-mounted folders                                                 |
-| `FETCHARR_PORT`   | Host port to serve on (default `8124`)                                                                          |
+| `CSRF_SECRET`     | 32+ random bytes (`openssl rand -hex 32`); required                                                               |
+| `TZ`              | Your IANA timezone (e.g. `Australia/Sydney`); the UI renders all timestamps in it                                 |
+| `PUID`/`PGID`     | UID/GID to run as; match the owner of your bind-mounted folders                                                   |
+| `FETCHARR_PORT`   | Host port to serve on (default `8124`)                                                                            |
 
 The full environment reference, including the settings fallback chain, is in the [deep dive](docs/DEEP_DIVE.md#full-environment-reference).
 
 ## Troubleshooting
 
 **Auto-discover can't find the Fetch box**
+
 - The container must run with host networking (the example compose already does); SSDP multicast doesn't cross Docker's bridge network.
 - The host must be on the same LAN/broadcast domain as the box; multicast doesn't cross subnets without help.
 - You can always enter the box's IP and port manually in Settings instead.
 
 **Plex token auto-detect fails**
+
 - It needs Plex's `Preferences.xml` bind-mounted into the container (`PLEX_PREFS_PATH`), which only works when Plex runs on the same host.
 - Paste the token manually instead; grab it from `app.plex.tv` (or Plex's own support article on finding your token).
 
 **An episode was skipped with "currently recording"**
+
 - That's deliberate: Fetch reports misleading sizes while a recording is live, so Fetcharr refuses to download it rather than save a truncated file. It syncs on the next run after the recording finishes.
 
 **A recording shows `partial`**
+
 - The downloaded bytes fell short of what Fetch reported. The next sync resumes from where it stopped (HTTP Range), so partials normally heal themselves.
 
 **Other containers can't reach Fetcharr by name**
+
 - A side-effect of host networking: Fetcharr isn't on any Docker bridge network. Reach it via the host's LAN IP and `FETCHARR_PORT` instead.
 
 **Timestamps show the wrong time**
+
 - Set `TZ` in your `.env` to your IANA zone; the UI renders every timestamp in the container's zone, whatever device you're browsing from.
 
 **Permission errors writing to `/config` or `/media/tv`**
+
 - Set `PUID`/`PGID` to match the owner of the bind-mounted host folders.
 
 ## Security
