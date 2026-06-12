@@ -8,7 +8,7 @@
 </p>
 
 <p align="center">
-  <img alt="License: GPL-3.0" src="https://img.shields.io/badge/license-GPL--3.0-f10c69.svg?style=flat-square"/>
+  <img alt="License: GPL-3.0-or-later" src="https://img.shields.io/badge/license-GPL--3.0--or--later-f10c69.svg?style=flat-square"/>
   <img alt="Node 22+" src="https://img.shields.io/badge/node-22%2B-009be4.svg?style=flat-square"/>
   <img alt="Docker" src="https://img.shields.io/badge/docker-compose-009be4.svg?style=flat-square"/>
   <img alt="Last commit" src="https://img.shields.io/github/last-commit/furey/fetcharr.svg?style=flat-square&color=e2b03c"/>
@@ -215,4 +215,4 @@ Contributions help me continue developing and improving this tool, allowing me t
 
 ## Licence
 
-GPL-3.0. See [LICENSE](LICENSE).
+GPL-3.0-or-later. See [LICENSE](LICENSE).
