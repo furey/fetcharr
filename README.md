@@ -192,7 +192,7 @@ Fetcharr has no login; anyone who can reach the port can view state and change s
 
 ## Technical deep dive
 
-The architecture diagram, the sync state machine, the delete-from-Fetch cloud rationale, the full environment reference, Docker deployment internals, the security model, local development setup, project layout, and testing notes are all in **[docs/DEEP_DIVE.md](docs/DEEP_DIVE.md)**.
+The architecture diagram, the sync state machine, the delete-from-Fetch cloud rationale, the full environment reference, Docker deployment internals, the security model, local development setup, project layout, and testing notes are all in [`./docs/DEEP_DIVE.md`](docs/DEEP_DIVE.md)**.
 
 ## Disclaimer
 
