@@ -1,6 +1,6 @@
 # Technical Deep Dive
 
-The technical companion to the [README](../README.md): what Fetcharr is doing under the hood, and why it works the way it does.
+The technical companion to [`README.md`](../README.md): what Fetcharr is doing under the hood, and why it works the way it does.
 
 ## Contents
 
@@ -268,11 +268,14 @@ The wider sync flow (DB transitions, `downloadFile` invocation, Plex notify) is 
 
 ## Regenerating the README screenshots
 
-The PNGs under `docs/img/` are captured from the running app by `scripts/capture-screenshots.sh`. The script pulls the official Playwright Docker image (no host install required), drives headless Chromium across all four tabs, and writes the screenshots back into `docs/img/` with the right ownership.
+The PNGs under `docs/img/` are captured from the running app by `scripts/capture-screenshots.sh`. The script pulls the official Playwright Docker image (no host install required), drives headless Chromium across all five tabs, and writes the screenshots back into `docs/img/` with the right ownership.
 
 ```sh
 # fetcharr container must be up + reachable at $FETCHARR_URL (default http://localhost:8124)
 ./scripts/capture-screenshots.sh
+
+# Re-shoot a single tab (dashboard, shows, syncs, recordings, settings):
+./scripts/capture-screenshots.sh settings
 
 # Or point at a remote instance / pin a different Playwright image:
 FETCHARR_URL=http://nas.lan:8124 \
@@ -280,4 +283,4 @@ PLAYWRIGHT_IMAGE=mcr.microsoft.com/playwright:v1.50.0-noble \
   ./scripts/capture-screenshots.sh
 ```
 
-The captures themselves are configured in `scripts/capture-screenshots.mjs` (viewport 1280×936, viewport-only clip so every shot has the same aspect ratio, 2× device-scale).
+The captures themselves are configured in `scripts/capture-screenshots.mjs` (viewport 1280×936, viewport-only clip so every shot has the same aspect ratio, 2× device-scale). Before the Settings shot, the script rewrites the `/api/settings` response in-page so no real box IP, Plex URL, host paths, or Fetch cloud credentials reach a committed PNG.

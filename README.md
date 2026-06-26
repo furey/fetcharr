@@ -23,10 +23,11 @@
 - [Prerequisites](#prerequisites)
 - [Quick start](#quick-start)
 - [Configuration](#configuration)
-- [Troubleshooting](#troubleshooting)
 - [Security](#security)
 - [Technical deep dive](#technical-deep-dive)
+- [Troubleshooting](#troubleshooting)
 - [Disclaimer](#disclaimer)
+- [Contributing](#contributing)
 - [Support](#support)
 - [Licence](#licence)
 
@@ -34,31 +35,31 @@
 
 Your Fetch TV box records the shows you tell it to, then the recordings sit on the box, watchable only through Fetch's own interface. **Fetcharr** watches the box on your LAN, downloads new episodes of shows you mark to follow, drops the files into your Plex TV library, pokes Plex to scan, and optionally deletes the recording from the Fetch box once Plex confirms the file.
 
-It's the missing automation layer if your media stack is Fetch TV → Plex: schedule recordings on the box as usual, and they turn up in Plex named, foldered, and ready to play.
+If your media stack is Fetch TV → Plex, Fetcharr is the automation in between: schedule recordings on the box as usual, and they turn up in Plex named and foldered.
 
 <p align="center">
-  <img src="docs/img/screenshot-dashboard.png" alt="Dashboard tab: sync deck, tally cards, recent syncs, integration status" width="100%"/>
-  <br/><em>Dashboard: live SYNC/IDLE deck, tally cards, and latest sync outcomes.</em>
+  <img src="docs/img/screenshot-dashboard.png" alt="Dashboard" width="100%"/>
+  <br/><em>Dashboard</em>
 </p>
 
 <p align="center">
-  <img src="docs/img/screenshot-shows.png" alt="Shows tab: per-show tracking table and add-show form" width="100%"/>
-  <br/><em>Shows: per-show tracking, destination folder + season template, per-show sync.</em>
+  <img src="docs/img/screenshot-shows.png" alt="Shows" width="100%"/>
+  <br/><em>Shows</em>
 </p>
 
 <p align="center">
-  <img src="docs/img/screenshot-recordings.png" alt="Recordings tab: filters, sortable columns, tombstoned rows" width="100%"/>
-  <br/><em>Recordings: filters, sortable headers, easily identifiable rows already deleted from the Fetch box, etc.</em>
+  <img src="docs/img/screenshot-recordings.png" alt="Recordings" width="100%"/>
+  <br/><em>Recordings</em>
 </p>
 
 <p align="center">
-  <img src="docs/img/screenshot-syncs.png" alt="Syncs tab: activity filter chips, sync history table" width="100%"/>
-  <br/><em>Syncs: activity-type filters over a capped sync history.</em>
+  <img src="docs/img/screenshot-syncs.png" alt="Syncs" width="100%"/>
+  <br/><em>Syncs</em>
 </p>
 
 ## What Fetcharr isn't
 
-- ❌ **An indexer integration:** (e.g. Sonarr / Radarr / Prowlarr) Fetcharr only consumes what Fetch has already recorded; it doesn't tell Fetch *what* to record. Use your Fetch TV box's own EPG to schedule recordings.
+- ❌ **An indexer integration** (Sonarr / Radarr / Prowlarr): Fetcharr only consumes what Fetch has already recorded; it doesn't tell Fetch *what* to record. Use the box's own EPG to schedule recordings.
 - ❌ **Authenticated:** designed for trusted LAN deployments. CSRF, rate-limiting, and a strict CSP are in place, but there's no login. Don't expose it to the internet (see [Security](#security)).
 - ❌ **A remuxer / transcoder:** files land as `.ts` from the box. Add Tdarr or similar downstream if you need `.mkv`.
 - ❌ **A notifier:** no Discord / ntfy / push integration.
@@ -75,8 +76,8 @@ It's the missing automation layer if your media stack is Fetch TV → Plex: sche
 - **In-progress recording protection**: refuses to download a half-recorded show. Fetch reports misleading sizes during live record; Fetcharr catches the sentinels (and HEAD-probes stale DLNA metadata) so you never end up with truncated files.
 - **Resumable, truncation-aware downloads**: HTTP Range resume across syncs; if on-disk bytes fall short of what Fetch reported, the row stays `partial` and the next sync picks up the remainder.
 - **Plex integration**: section refresh after every sync that downloaded something, plus a Refresh Plex now button.
-- **Optional delete-from-Fetch**: once Plex confirms the file, free up the box. This goes through Fetch's cloud API because the box's LAN-side delete is broken; the [deep dive](docs/DEEP_DIVE.md#why-delete-from-fetch-goes-through-the-cloud-not-lan) has the full story.
-- **Self-housekeeping**: sync history auto-prunes to the latest 500 rows; recording rows age out 30 days after delete-from-Fetch. No manual cleanup.
+- **Optional delete-from-Fetch**: once Plex confirms the file, free up the box. This goes through Fetch's cloud API because the box's LAN-side delete is broken; [`docs/DEEP_DIVE.md`](docs/DEEP_DIVE.md#why-delete-from-fetch-goes-through-the-cloud-not-lan) has the full story.
+- **Self-housekeeping**: sync history auto-prunes to the latest 500 rows; recording rows age out 30 days after delete-from-Fetch.
 - **TZ-aware UI**: container `TZ` propagates to the browser; timestamps render in that zone regardless of which device hits the page.
 - **Danger Zone**: one-click `NUKE ALL STATE` reset back to the welcome wizard. DB only; downloaded media files untouched.
 - **Authless LAN service**: SQLite-backed, single Docker container, no external runtime dependencies once configured.
@@ -126,7 +127,7 @@ docker compose logs -f
 
 Browse to `http://<host-ip>:8124`. The first visit opens a setup wizard that walks you through the Fetch box (with Auto-discover), storage (with a TEST PATH button), Plex, and the optional Fetch Cloud step. Everything is editable later in Settings, and the wizard can be re-opened from there at any time.
 
-That covers it: mark shows to follow on the Shows tab, and Fetcharr syncs them on the schedule you set.
+Mark shows to follow on the Shows tab and Fetcharr syncs them on the schedule you set.
 
 ### Updating
 
@@ -151,7 +152,20 @@ The Fetch TV box address and all integration credentials (Plex token, Fetch clou
 | `PUID`/`PGID`     | UID/GID to run as; match the owner of your bind-mounted folders                                                   |
 | `FETCHARR_PORT`   | Host port to serve on (default `8124`)                                                                            |
 
-The full environment reference, including the settings fallback chain, is in the [deep dive](docs/DEEP_DIVE.md#full-environment-reference).
+The full environment reference, including the settings fallback chain, is in [`docs/DEEP_DIVE.md`](docs/DEEP_DIVE.md#full-environment-reference).
+
+<p align="center">
+  <img src="docs/img/screenshot-settings.png" alt="Settings" width="100%"/>
+  <br/><em>Settings</em>
+</p>
+
+## Security
+
+Fetcharr has no login; anyone who can reach the port can view state and change settings. CSRF protection, rate limiting, a strict CSP, and `noindex` headers are all in place, but the design assumes a trusted home LAN: don't port-forward or reverse-proxy it to the internet. Supply-chain hardening, the HTTP security headers, and the rationale behind each measure are covered in [`docs/DEEP_DIVE.md`](docs/DEEP_DIVE.md#security-model); vulnerability reporting and accepted residual risks are in [SECURITY.md](SECURITY.md).
+
+## Technical deep dive
+
+Architecture diagrams, the sync state machine, the delete-from-Fetch cloud rationale, the full environment reference, Docker deployment, the security model, local development, and more are all in [`docs/DEEP_DIVE.md`](docs/DEEP_DIVE.md).
 
 ## Troubleshooting
 
@@ -186,14 +200,6 @@ The full environment reference, including the settings fallback chain, is in the
 
 - Set `PUID`/`PGID` to match the owner of the bind-mounted host folders.
 
-## Security
-
-Fetcharr has no login; anyone who can reach the port can view state and change settings. CSRF protection, rate limiting, a strict CSP, and `noindex` headers are all in place, but the design assumes a trusted home LAN: don't port-forward or reverse-proxy it to the internet. Supply-chain hardening, the HTTP security headers, and the rationale behind each measure are covered in the [deep dive](docs/DEEP_DIVE.md#security-model); vulnerability reporting and accepted residual risks are in [SECURITY.md](SECURITY.md).
-
-## Technical deep dive
-
-The architecture diagram, the sync state machine, the delete-from-Fetch cloud rationale, the full environment reference, Docker deployment internals, the security model, local development setup, project layout, and testing notes are all in [`./docs/DEEP_DIVE.md`](docs/DEEP_DIVE.md)**.
-
 ## Disclaimer
 
 This project:
@@ -205,13 +211,17 @@ This project:
 - Is intended for educational and experimental purposes only.
 - Is provided as-is with no warranty; use at your own risk.
 
+## Contributing
+
+If you hit a problem or want to compare notes, start a thread in [Discussions](https://github.com/furey/fetcharr/discussions).
+
 ## Support
 
 If you've found this project helpful consider supporting my work through:
 
 [Buy Me a Coffee](https://www.buymeacoffee.com/furey) | [GitHub Sponsorship](https://github.com/sponsors/furey)
 
-Contributions help me continue developing and improving this tool, allowing me to dedicate more time to add new features and ensuring it remains a valuable resource for the community.
+Your support helps me keep developing the project and adding new features.
 
 ## Licence
 
