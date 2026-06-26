@@ -5,6 +5,7 @@ REPO_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 FETCHARR_URL="${FETCHARR_URL:-http://localhost:8124}"
 FETCHARR_URL="${FETCHARR_URL%/}"
 PLAYWRIGHT_IMAGE="${PLAYWRIGHT_IMAGE:-mcr.microsoft.com/playwright:v1.49.0-jammy}"
+SHOT_FILTER="${SHOT_FILTER:-${1:-}}"
 HOST_UID=$(id -u)
 HOST_GID=$(id -g)
 
@@ -25,6 +26,7 @@ docker run --rm --network host \
   -v "$REPO_ROOT":/work \
   -w /tmp \
   -e FETCHARR_URL="$FETCHARR_URL" \
+  -e SHOT_FILTER="$SHOT_FILTER" \
   "$PLAYWRIGHT_IMAGE" \
   bash -c "npm init -y >/dev/null && \
     npm install --silent --no-save --no-audit --no-fund playwright@1.49.0 2>&1 | tail -1 && \
