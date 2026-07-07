@@ -264,6 +264,12 @@ table.deck-table tbody tr.tombstone .btn {
 .pill.failed     { color: #ff5c97; }
 .pill.error      { color: #ff5c97; }
 .pill.skipped    { color: #8b837e; }
+.pill.scanning      { color: #4ebef0; }
+.pill.detected      { color: #ffcd00; }
+.pill.no_breaks     { color: #8b837e; }
+.pill.cut           { color: #e2b03c; }
+.pill.cut_failed    { color: #ff5c97; }
+.pill.detect_failed { color: #ff5c97; }
 
 .field-input {
   width: 100%;

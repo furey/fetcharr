@@ -7,6 +7,7 @@ The technical companion to [`README.md`](../README.md): what Fetcharr is doing u
 - [Architecture](#architecture)
 - [Sync state machine](#sync-state-machine)
 - [Why delete-from-Fetch goes through the cloud, not LAN](#why-delete-from-fetch-goes-through-the-cloud-not-lan)
+- [Ad removal](#ad-removal)
 - [Full environment reference](#full-environment-reference)
 - [Docker deployment](#docker-deployment)
 - [`fetchtv` dependency](#fetchtv-dependency)
@@ -101,6 +102,31 @@ The original plan was UPnP `DestroyObject` from upstream [`fetchtv`](https://git
 
 The only working deletion path is Fetch's cloud APIs (HTTPS auth + WebSocket to `messages.fetchtv.com.au` with the user's activation code + PIN; see [`pyfetchtv`](https://github.com/jinxo13/pyfetchtv) for the reference implementation).
 
+## Ad removal
+
+Free-to-air recordings carry their commercial breaks. Plex has no marker API for non-DVR library items and doesn't read EDL sidecar files, so skip markers are a dead end — the only end state that actually helps playback is physically cutting the breaks out of the file. Fetcharr does this with two spawned binaries (`comskip` for detection, `ffmpeg`/`ffprobe` for cutting; both baked into the Docker image, never npm deps) and a safety design that assumes detection will sometimes be wrong.
+
+The feature is double-gated: a global `ad_removal_enabled` setting (Settings → AD REMOVAL, default off) and a per-show mode (`off` / `detect` / `cut`, default `off`). Processing runs inline in the sync loop, immediately after a download classifies `done` (never on `partial`), and everything is wrapped so a failure can never kill the sync or damage the recording.
+
+**Detect** runs comskip against the file with an EDL output forced on (the resolved ini is copied to a temp file with `output_edl=1` appended — last key wins in comskip — so a user-supplied ini can't silently disable it), parses the EDL, and stores the breaks as JSON on the `recordings` row (`ad_status='detected'`, `ad_breaks_json`). The file is untouched. This mode exists so users can audit comskip's accuracy on their channels before letting it cut anything.
+
+**Cut** continues from detection:
+
+1. `ffprobe` reads the container duration; `computeKeepSegments` inverts the merged, clamped break list into keep segments. An empty keep list (breaks covering the whole file) is treated as a failure — Fetcharr never produces an empty output.
+2. Each keep segment is extracted with `ffmpeg -ss … -to … -c copy` (keyframe stream-copy, no transcode; output stays `.ts`), then the segments are concatenated with ffmpeg's concat demuxer. All intermediate files live in a hidden `.fetcharr-adcut/` workdir next to the recording — same filesystem, so the final swap is an atomic rename, and hidden so Plex ignores it. The workdir is removed on every exit path.
+3. **Verify then swap**: the output must be non-empty and its ffprobe duration must match the summed keep-segment duration within a tolerance that scales with boundary count (`max(5, 2 × boundaries)` seconds — keyframe snapping costs up to a couple of seconds per cut point). Only then does the swap happen: original → `<file>.ts.orig`, output → original name; if the second rename fails the `.orig` is rolled back. Plex ignores the unknown `.orig` extension.
+4. Any failure at any step leaves the original file exactly where it was and marks the row `cut_failed`; the sync carries on.
+
+`.orig` backups are pruned after a configurable retention window (`ad_original_retention_days`, default 7) during sync housekeeping, giving a recovery window for bad cuts (rename the `.orig` back).
+
+**Delete-from-Fetch gating**: for a `cut`-mode show, the copy on the Fetch box is the last pristine source once the local file has been rewritten. Auto-delete is therefore only queued when the cut verified (or no breaks were found); a `cut_failed` or detect-only outcome keeps the box copy. This composes with the existing Plex-refresh delete guard.
+
+**comskip.ini resolution**: Fetcharr bundles `assets/comskip.ini`, tuned for Australian free-to-air DVB-T (detection method, break-length windows, brightness/silence thresholds, logo detection). If `comskip.ini` exists in the config dir (the `/config` bind mount), it wins. `GET /api/settings` reports which one is active and the Settings panel displays it.
+
+**Manual scans**: `POST /api/recordings/:fetch_id/ad-scan` (re)processes an already-downloaded recording using the show's mode (detect-only when the show is `off`), so existing files can be trialled without redownloading. The endpoint responds `202` immediately and processes in the background; one manual scan runs at a time, and the UI polls the recordings list for the resulting `ad_status`.
+
+Comskip is CPU-bound — minutes per recording is normal. It's spawned via `nice -n 10` so a scan doesn't starve the box of I/O for concurrent downloads, and per-recording statuses (`scanning`, `detected`, `no_breaks`, `cut`, `detect_failed`, `cut_failed`) surface on the Recordings tab.
+
 ## Full environment reference
 
 The Fetch TV box IP/port and all integration credentials (Plex token, Fetch cloud activation code, etc.) are runtime settings; configure them in the web UI (or the first-run wizard), not via env. The env vars below are deploy/runtime knobs only.
@@ -194,7 +220,7 @@ npm start                  # http://localhost:8124; first visit shows the setup 
 > `npm run setup` calls `npm audit signatures`, which honours `.npmrc`'s `min-release-age=3`. If a dep in the lockfile was published in the last 3 days, the audit step will fail (`ETARGET notarget`). Either wait for it to age past the threshold or run `npm install --ignore-scripts --min-release-age=0` once for the freshly-published dep.
 
 > [!TIP]<br>
-> `package.json`'s `volta` block pins `node@22.19.0` + `npm@11.15.0` (matching the Dockerfile's `node:22-alpine` + `npm@11.15.0`). Install [Volta](https://volta.sh) and it'll auto-switch when you `cd` into the repo (avoids `EBADENGINE` from the host npm and ABI mismatches on `better-sqlite3`).
+> `package.json`'s `volta` block pins `node@22.19.0` + `npm@11.15.0` (matching the Dockerfile's `node:22-bookworm-slim` + `npm@11.15.0`). Install [Volta](https://volta.sh) and it'll auto-switch when you `cd` into the repo (avoids `EBADENGINE` from the host npm and ABI mismatches on `better-sqlite3`).
 
 For dev:
 
@@ -212,17 +238,21 @@ fetcharr/
 │   ├── db.js               # Knex instance + simple settings get/set
 │   ├── folder-matcher.js   # Fuse.js wrapper that scans /media/tv
 │   ├── sync.js             # Sync engine; discover, browse, match shows, download, persist; exports classifyOutcome / matchShow / buildDestPath for tests
+│   ├── commercials.js      # Ad removal; comskip detect + ffmpeg cut orchestration, pure helpers exported for tests
 │   ├── scheduler.js        # node-cron wiring, reloads on settings change
 │   ├── plex.js             # Plex section refresh + token detection from Preferences.xml
 │   ├── fetch-cloud.js      # Fetch cloud WebSocket client for delete-from-box
 │   └── web/                # Static UI; Vue 3 SPA (browser ESM) + Tailwind v4 Play CDN (self-hosted), hash-routed across 5 tabs, no build step
 ├── test/
 │   ├── sync.test.js        # node --test: matchShow, buildDestPath, classifyOutcome state-transition truth table
+│   ├── commercials.test.js # node --test: EDL parsing, keep-segment math, tolerance, delete gating, ini resolution
 │   └── folder-matcher.test.js # node --test: real on-disk fixture under os.tmpdir()
+├── assets/
+│   └── comskip.ini         # Bundled AU free-to-air comskip tuning; /config/comskip.ini overrides
 ├── migrations/
 │   └── 0001_initial.js     # Initial schema; additive migrations from here on
 ├── knexfile.js             # Honours DB_PATH env (defaults to ./config/state.db)
-├── Dockerfile              # node:22-alpine + tini + healthcheck
+├── Dockerfile              # node:22-bookworm-slim + tini + comskip + ffmpeg + healthcheck
 ├── docker-entrypoint.sh    # `knex migrate:latest` then `exec node src/server.js`
 ├── docker-compose.example.yml  # Generic compose template; copy to docker-compose.yml
 ├── .env.example            # Local-dev minimal envs (CSRF_SECRET, TZ, PUID/PGID)
@@ -250,10 +280,13 @@ Run the automated suite with:
 npm test
 ```
 
-It uses Node 22's built-in test runner (`node --test`), with no additional test dependencies. Two files under `test/`:
+It uses Node 22's built-in test runner (`node --test`), with no additional test dependencies. Three files under `test/`:
 
 - **`test/sync.test.js`**: exhaustive truth-table coverage of `classifyOutcome` (every state-machine transition, including the real-world MPEG-TS 20-byte-delta case and `-1` sentinel handling), plus pure-function tests for `matchShow` (case-insensitive substring matching) and `buildDestPath` (`{season}` / `{season_padded}` / `{season_unpadded}` substitution, filesystem-safe filename sanitisation, missing-season fallback).
+- **`test/commercials.test.js`**: pure-function coverage of the ad-removal decision logic — EDL parsing (malformed rows, action filtering), keep-segment math (clamping, merging, break-at-edge, whole-file-break), cut verification tolerance, comskip.ini resolution, and the auto-delete gating matrix.
 - **`test/folder-matcher.test.js`**: real on-disk fixture under `os.tmpdir()` exercising `listShowFolders` + `matchShowFolder` against realistic disambiguated folder names (`Bluey (2018)`, `LOL - Last One Laughing UK`, etc.).
+
+The comskip/ffmpeg orchestration in `src/commercials.js` is exercised end-to-end inside the Docker image rather than mocked. To repeat that check: synthesize a `.ts` with ffmpeg (long `testsrc2` program segments around 30-second "ad" blocks separated by ~2s of black + silence), then call `processRecordingAds` against it in the container. One caveat learned the hard way: comskip's fuzzy scorer won't flag synthetic ad blocks with the bundled AU ini (no logo, non-standard block lengths keep scores under its 1.05 threshold) — drop a `/config/comskip.ini` containing `detect_method=1` plus `punish=1` / `punish_threshold=1.2` / `punish_modifier=4` so the brighter ad blocks cross the threshold. That override path doubles as a test of the ini-resolution logic.
 
 The wider sync flow (DB transitions, `downloadFile` invocation, Plex notify) is still exercised end-to-end against the live Fetch box rather than via integration tests with mocks. Manual smoke test:
 
