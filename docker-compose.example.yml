@@ -14,6 +14,10 @@
 # uses multicast on 239.255.255.250:1900, which does NOT traverse Docker's bridge
 # network. With host networking the container has no `ports:` mapping — it binds
 # directly to ${FETCHARR_PORT} on the host LAN IP.
+#
+# The optional ad-removal feature (Settings → AD REMOVAL) runs comskip inside
+# this container and is CPU-bound: expect minutes of sustained CPU per scanned
+# recording. It's niced down, but budget for it on low-power hosts.
 
 services:
   fetcharr:

@@ -24,6 +24,7 @@ import {
   deleteRecordings as deleteCloudRecordings,
   FetchCloudError,
 } from './fetch-cloud.js'
+import { startManualAdScan, comskipIniOverrideExists } from './commercials.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -31,6 +32,7 @@ const PORT = Number(process.env.PORT || 8124)
 const DEV_CSRF_SECRET = 'dev-only-csrf-secret-set-CSRF_SECRET-in-prod'
 const CSRF_SECRET = process.env.CSRF_SECRET || DEV_CSRF_SECRET
 const DEFAULT_FETCH_PORT = 49152
+const AD_REMOVAL_MODES = ['off', 'detect', 'cut']
 
 if (process.env.NODE_ENV === 'production' && CSRF_SECRET === DEV_CSRF_SECRET) {
   console.error(
@@ -206,6 +208,38 @@ app.post(
   },
 )
 
+app.post(
+  '/api/recordings/:fetch_id/ad-scan',
+  syncLimiter,
+  doubleCsrfProtection,
+  async (req, res) => {
+    const fetchId = req.params.fetch_id
+    const row = await db('recordings').where({ fetch_id: fetchId }).first()
+    if (!row) return res.status(404).json({ error: 'recording not found' })
+    if (row.status !== 'done') {
+      return res.status(409).json({ error: 'recording is not downloaded' })
+    }
+    if (!row.file_path) return res.status(409).json({ error: 'recording has no file path' })
+    try {
+      await fs.access(row.file_path)
+    } catch {
+      return res.status(409).json({ error: 'recording file missing on disk' })
+    }
+    const show = row.show_id
+      ? await db('shows').where({ id: row.show_id }).first()
+      : null
+    const showMode = show?.ad_removal || 'off'
+    const mode = showMode === 'off' ? 'detect' : showMode
+    const started = startManualAdScan({
+      filePath: row.file_path,
+      mode,
+      fetchId,
+    })
+    if (!started) return res.status(409).json({ error: 'an ad scan is already running' })
+    res.status(202).json({ started: true, mode })
+  },
+)
+
 app.delete('/api/recordings', doubleCsrfProtection, async (req, res) => {
   if (req.query.deleted !== 'true') {
     return res.status(400).json({ error: 'refusing bulk delete without ?deleted=true' })
@@ -321,9 +355,13 @@ app.post('/api/shows', doubleCsrfProtection, async (req, res) => {
     season_template,
     enabled,
     delete_after_download,
+    ad_removal,
   } = req.body || {}
   if (!fetch_show_pattern || !dest_folder) {
     return res.status(400).json({ error: 'fetch_show_pattern and dest_folder are required' })
+  }
+  if (ad_removal !== undefined && !AD_REMOVAL_MODES.includes(ad_removal)) {
+    return res.status(400).json({ error: `ad_removal must be one of ${AD_REMOVAL_MODES.join(', ')}` })
   }
   const inserted = await db('shows').insert({
     fetch_show_pattern: String(fetch_show_pattern).trim(),
@@ -331,6 +369,7 @@ app.post('/api/shows', doubleCsrfProtection, async (req, res) => {
     season_template: season_template ? String(season_template).trim() : 'Season {season}',
     enabled: enabled !== false,
     delete_after_download: delete_after_download === true,
+    ad_removal: ad_removal || 'off',
   }).returning('id')
   const row = inserted[0]
   const id = typeof row === 'object' ? row.id : row
@@ -346,6 +385,12 @@ app.patch('/api/shows/:id', doubleCsrfProtection, async (req, res) => {
   if (req.body?.enabled !== undefined) patch.enabled = Boolean(req.body.enabled)
   if (req.body?.delete_after_download !== undefined) {
     patch.delete_after_download = Boolean(req.body.delete_after_download)
+  }
+  if (req.body?.ad_removal !== undefined) {
+    if (!AD_REMOVAL_MODES.includes(req.body.ad_removal)) {
+      return res.status(400).json({ error: `ad_removal must be one of ${AD_REMOVAL_MODES.join(', ')}` })
+    }
+    patch.ad_removal = req.body.ad_removal
   }
   if (Object.keys(patch).length === 0) {
     return res.status(400).json({ error: 'no fields to update' })
@@ -461,6 +506,9 @@ app.get('/api/settings', async (req, res) => {
     deleteAfterPlexRefreshOnly,
     plexPrefsPath,
     mediaRoot,
+    adRemovalEnabled,
+    adOriginalRetentionDays,
+    comskipIniOverride,
   ] = await Promise.all([
     getSetting('fetch_ip'),
     getSetting('fetch_port'),
@@ -474,6 +522,9 @@ app.get('/api/settings', async (req, res) => {
     getSetting('delete_after_plex_refresh_only'),
     getPlexPrefsPath(),
     getMediaRoot(),
+    getSetting('ad_removal_enabled'),
+    getSetting('ad_original_retention_days'),
+    comskipIniOverrideExists(),
   ])
   res.json({
     fetch_ip: fetchIp,
@@ -494,6 +545,10 @@ app.get('/api/settings', async (req, res) => {
     delete_after_plex_refresh_only: deleteAfterPlexRefreshOnly == null
       ? true
       : deleteAfterPlexRefreshOnly !== 'false',
+    // Default false: ad removal is opt-in.
+    ad_removal_enabled: adRemovalEnabled === 'true',
+    ad_original_retention_days: adOriginalRetentionDays || '7',
+    comskip_ini_override: comskipIniOverride,
   })
 })
 
@@ -519,6 +574,16 @@ app.post('/api/settings', doubleCsrfProtection, async (req, res) => {
       'delete_after_plex_refresh_only',
       body.delete_after_plex_refresh_only ? 'true' : 'false',
     )
+  }
+  if (body.ad_removal_enabled !== undefined) {
+    await setSetting('ad_removal_enabled', body.ad_removal_enabled ? 'true' : 'false')
+  }
+  if (body.ad_original_retention_days !== undefined) {
+    const days = Number(body.ad_original_retention_days)
+    if (!Number.isInteger(days) || days <= 0) {
+      return res.status(400).json({ error: 'ad_original_retention_days must be a positive integer' })
+    }
+    await setSetting('ad_original_retention_days', String(days))
   }
   if (body.sync_cron !== undefined) {
     await setSetting('sync_cron', String(body.sync_cron))
