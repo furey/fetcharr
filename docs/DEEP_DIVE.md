@@ -121,11 +121,11 @@ The feature is double-gated: a global `ad_removal_enabled` setting (Settings →
 
 **Delete-from-Fetch gating**: for a `cut`-mode show, the copy on the Fetch box is the last pristine source once the local file has been rewritten. Auto-delete is therefore only queued when the cut verified (or no breaks were found); a `cut_failed` or detect-only outcome keeps the box copy. This composes with the existing Plex-refresh delete guard.
 
-**comskip.ini resolution**: Fetcharr bundles `assets/comskip.ini`, tuned for Australian free-to-air DVB-T (detection method, break-length windows, brightness/silence thresholds, logo detection). If `comskip.ini` exists in the config dir (the `/config` bind mount), it wins. `GET /api/settings` reports which one is active and the Settings panel displays it.
+**comskip.ini resolution**: Fetcharr bundles `assets/comskip.ini`, tuned for Australian free-to-air DVB-T (detection method, break-length windows, brightness/silence thresholds, logo detection). Detect-mode runs against real Network 10 captures (July 2026) found the expected pattern — five 2.5–4-minute ad blocks per ~75-minute episode plus occasional pre-roll/tail slivers — so the bundled ini is a sane default for at least that channel; others remain untested. If `comskip.ini` exists in the config dir (the `/config` bind mount), it wins. `GET /api/settings` reports which one is active and the Settings panel displays it.
 
 **Manual scans**: `POST /api/recordings/:fetch_id/ad-scan` (re)processes an already-downloaded recording using the show's mode (detect-only when the show is `off`), so existing files can be trialled without redownloading. The endpoint responds `202` immediately and processes in the background; one manual scan runs at a time, and the UI polls the recordings list for the resulting `ad_status`.
 
-Comskip is CPU-bound — minutes per recording is normal. It's spawned via `nice -n 10` so a scan doesn't starve the box of I/O for concurrent downloads, and per-recording statuses (`scanning`, `detected`, `no_breaks`, `cut`, `detect_failed`, `cut_failed`) surface on the Recordings tab.
+Comskip is CPU-bound — expect roughly half an hour for a 75-minute 1080i broadcast `.ts` (~2.7 GB) on NAS-class hardware. It's spawned via `nice -n 10` so a scan doesn't starve the box of I/O for concurrent downloads, and per-recording statuses (`scanning`, `detected`, `no_breaks`, `cut`, `detect_failed`, `cut_failed`) surface on the Recordings tab.
 
 ## Full environment reference
 
