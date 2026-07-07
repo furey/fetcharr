@@ -90,6 +90,14 @@ const deleteSummary = (d) => {
   return 'del ?'
 }
 
+const adsSummary = (a) => {
+  const bits = []
+  if (a.detected) bits.push(`${a.detected} detected`)
+  if (a.cut) bits.push(`${a.cut} cut`)
+  if (a.failed) bits.push(`${a.failed} failed`)
+  return `ads ${bits.length ? bits.join(' · ') : `${a.scanned} scanned`}`
+}
+
 const triggerMeta = (t) => {
   if (t === 'cron') return { kind: 'trigger-cron', title: 'Cron-scheduled sync' }
   if (t === 'manual-single') return { kind: 'trigger-manual', title: 'Manual single-show sync' }
@@ -106,6 +114,7 @@ const summaryParts = (s) => {
   if (s.failed) parts.push({ kind: 'text', text: `fail ${s.failed}` })
   if (s.plex) parts.push({ kind: 'text', text: plexSummary(s.plex) })
   if (s.delete) parts.push({ kind: 'text', text: deleteSummary(s.delete) })
+  if (s.ads) parts.push({ kind: 'text', text: adsSummary(s.ads) })
   if (s.message) parts.push({ kind: 'text', text: s.message })
   if (s.errors?.length) {
     const tail = s.errors.length > 2 ? '…' : ''
@@ -520,6 +529,7 @@ const ShowsView = {
               <th>Season template</th>
               <th>Enabled</th>
               <th title="Delete from Fetch after each successful download (cloud delete).">Delete after DL</th>
+              <th title="Detect = report ad breaks only; Cut = remove them from the file (keeps a .orig backup).">Ad removal</th>
               <th></th>
             </tr></thead>
             <tbody>
@@ -532,6 +542,16 @@ const ShowsView = {
                 </td>
                 <td>
                   <input type="checkbox" class="chk" :checked="s.delete_after_download" @change="toggleDeleteAfter(s, $event.target.checked)" />
+                </td>
+                <td>
+                  <select class="field-input" style="width: auto; padding-top: 0.3rem; padding-bottom: 0.3rem;"
+                    :value="s.ad_removal" :disabled="!adRemovalEnabled"
+                    :title="adRemovalEnabled ? '' : 'Enable ad removal in Settings first.'"
+                    @change="setAdRemoval(s, $event.target.value)">
+                    <option value="off">OFF</option>
+                    <option value="detect">DETECT</option>
+                    <option value="cut">CUT</option>
+                  </select>
                 </td>
                 <td>
                   <div class="flex items-center gap-2 flex-wrap">
@@ -596,6 +616,17 @@ const ShowsView = {
                 </span>
               </label>
             </div>
+            <div class="field-row">
+              <label class="field-label">Ad removal</label>
+              <select class="field-input" v-model="newAdRemoval" :disabled="!adRemovalEnabled">
+                <option value="off">OFF</option>
+                <option value="detect">DETECT — report ad breaks only</option>
+                <option value="cut">CUT — remove ad breaks (keeps .orig backup)</option>
+              </select>
+              <p v-if="!adRemovalEnabled" class="text-xs text-ink-mute mt-2">
+                Enable ad removal in Settings to use this.
+              </p>
+            </div>
           </div>
           <div class="flex items-center gap-3 mt-2">
             <button type="submit" class="btn btn-primary" :disabled="adding">
@@ -615,6 +646,7 @@ const ShowsView = {
     const newFolder = ref('')
     const newTemplate = ref('Season {season}')
     const newDeleteAfter = ref(false)
+    const newAdRemoval = ref('off')
     const suggestion = ref('')
     const suggestionIsNew = ref(false)
     const adding = ref(false)
@@ -622,6 +654,7 @@ const ShowsView = {
     const syncingId = ref(null)
     const mediaRoot = ref('')
     const fetchIpSet = ref(false)
+    const adRemovalEnabled = ref(false)
 
     const refresh = async () => {
       const r = await api('GET', '/api/shows')
@@ -632,6 +665,7 @@ const ShowsView = {
       const s = await api('GET', '/api/settings').catch(() => ({}))
       mediaRoot.value = s.media_root || ''
       fetchIpSet.value = Boolean(s.fetch_ip)
+      adRemovalEnabled.value = Boolean(s.ad_removal_enabled)
     }
 
     const suggestFor = async (pattern) => {
@@ -682,11 +716,13 @@ const ShowsView = {
           dest_folder: newFolder.value.trim(),
           season_template: newTemplate.value.trim() || 'Season {season}',
           delete_after_download: newDeleteAfter.value === true,
+          ad_removal: newAdRemoval.value,
         })
         newPattern.value = ''
         newFolder.value = ''
         newTemplate.value = 'Season {season}'
         newDeleteAfter.value = false
+        newAdRemoval.value = 'off'
         suggestion.value = ''
         await refresh()
         flash({ msg: 'Added.' })
@@ -709,6 +745,15 @@ const ShowsView = {
     const toggleDeleteAfter = async (s, delete_after_download) => {
       try {
         await api('PATCH', `/api/shows/${s.id}`, { delete_after_download })
+        await refresh()
+      } catch (err) {
+        flash({ msg: `Error: ${err.message}`, kind: 'err', ms: 5000 })
+      }
+    }
+
+    const setAdRemoval = async (s, ad_removal) => {
+      try {
+        await api('PATCH', `/api/shows/${s.id}`, { ad_removal })
         await refresh()
       } catch (err) {
         flash({ msg: `Error: ${err.message}`, kind: 'err', ms: 5000 })
@@ -756,9 +801,9 @@ const ShowsView = {
 
     return {
       shows, fetchShows, folders, mediaRoot,
-      newPattern, newFolder, newTemplate, newDeleteAfter,
-      suggestion, suggestionIsNew, adding, loadingShows, syncingId,
-      add, toggle, toggleDeleteAfter, remove, loadFetchShows, syncOne,
+      newPattern, newFolder, newTemplate, newDeleteAfter, newAdRemoval,
+      suggestion, suggestionIsNew, adding, loadingShows, syncingId, adRemovalEnabled,
+      add, toggle, toggleDeleteAfter, setAdRemoval, remove, loadFetchShows, syncOne,
       flashText, flashKind,
     }
   },
@@ -976,6 +1021,7 @@ const RecordingsView = {
               <th>S/E</th>
               <th class="sortable" @click="toggleSort('size')">Size{{ sortMarker('size') }}</th>
               <th class="sortable" @click="toggleSort('status')">Status{{ sortMarker('status') }}</th>
+              <th title="Ad break detection/removal status. Hover a pill for break count + minutes.">Ads</th>
               <th class="sortable" @click="toggleSort('downloaded_at')">Downloaded{{ sortMarker('downloaded_at') }}</th>
               <th></th>
             </tr></thead>
@@ -994,8 +1040,23 @@ const RecordingsView = {
                     <span v-if="r.error" class="block text-xs font-mono text-signal-magenta-hi mt-1">{{ r.error }}</span>
                   </template>
                 </td>
+                <td>
+                  <span v-if="r.ad_status" :class="['pill', r.ad_status]" :title="adTooltip(r)">{{ adLabel(r.ad_status) }}</span>
+                  <span v-else class="text-ink-mute">—</span>
+                </td>
                 <td class="font-mono whitespace-nowrap">{{ fmtTime(r.downloaded_at) }}</td>
                 <td>
+                  <div class="flex items-center gap-2">
+                  <button v-if="canAdScan(r)" type="button" class="btn btn-sm btn-icon"
+                    @click="adScan(r)" :disabled="adScanningId === r.fetch_id"
+                    title="Scan this recording for ad breaks now (uses the show's ad removal mode; detect-only when the show is off).">
+                    <span v-if="adScanningId === r.fetch_id">…</span>
+                    <svg v-else viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <circle cx="4" cy="4.5" r="1.75"/>
+                      <circle cx="4" cy="11.5" r="1.75"/>
+                      <path d="M5.5 5.75 13 12M5.5 10.25 13 4"/>
+                    </svg>
+                  </button>
                   <button v-if="canDelete(r)" type="button" class="btn btn-sm btn-icon btn-danger"
                     @click="deleteFromFetch(r)" :disabled="deletingId === r.fetch_id"
                     title="Delete this recording from the Fetch TV box. Irreversible.">
@@ -1012,6 +1073,7 @@ const RecordingsView = {
                       <path d="M3 5h10M6.5 5V3h3v2M4.5 5l.7 8.5h5.6L11.5 5M6.5 7.5v4M9.5 7.5v4"/>
                     </svg>
                   </button>
+                  </div>
                 </td>
               </tr>
             </tbody>
@@ -1037,6 +1099,8 @@ const RecordingsView = {
     const deletingId = ref(null)
     const removingId = ref(null)
     const purging = ref(false)
+    const adRemovalEnabled = ref(false)
+    const adScanningId = ref(null)
     const total = ref(0)
     const page = ref(1)
     const pageSize = ref(50)
@@ -1109,6 +1173,11 @@ const RecordingsView = {
       shows.value = r.shows || []
     }
 
+    const loadAdRemovalSetting = async () => {
+      const s = await api('GET', '/api/settings').catch(() => ({}))
+      adRemovalEnabled.value = Boolean(s.ad_removal_enabled)
+    }
+
     const setStatus = (v) => { statusFilter.value = v; page.value = 1 }
     const setShow = (v) => { showFilter.value = v; page.value = 1 }
     const setSince = (v) => { sinceFilter.value = v; page.value = 1 }
@@ -1134,6 +1203,33 @@ const RecordingsView = {
 
     const canDelete = (r) => r.status === 'done' && !r.deleted_from_fetch_at
     const isRecording = (r) => r.status === 'skipped' && r.error === 'currently recording'
+    const canAdScan = (r) => adRemovalEnabled.value && r.status === 'done'
+
+    const adLabel = (status) => status.replace(/_/g, ' ')
+
+    const adTooltip = (r) => {
+      if (!r.ad_breaks_json) return ''
+      try {
+        const breaks = JSON.parse(r.ad_breaks_json)
+        const secs = breaks.reduce((sum, b) => sum + (b.end - b.start), 0)
+        return `${breaks.length} break${breaks.length === 1 ? '' : 's'} · ${(secs / 60).toFixed(1)} min of ads`
+      } catch {
+        return ''
+      }
+    }
+
+    const adScan = async (r) => {
+      adScanningId.value = r.fetch_id
+      try {
+        await api('POST', `/api/recordings/${encodeURIComponent(r.fetch_id)}/ad-scan`)
+        flash({ msg: `Ad scan started for "${r.fetch_title}" — can take minutes.` })
+        await refresh()
+      } catch (err) {
+        flash({ msg: `Ad scan failed: ${err.message}`, kind: 'err', ms: 6000 })
+      } finally {
+        adScanningId.value = null
+      }
+    }
 
     const deleteFromFetch = async (r) => {
       const prompt = `Delete "${r.fetch_title}" from the Fetch TV box?\n\n`
@@ -1191,6 +1287,7 @@ const RecordingsView = {
     let pollTimer = null
     onMounted(() => {
       loadShows()
+      loadAdRemovalSetting()
       refresh()
       pollTimer = setInterval(refresh, RECORDINGS_POLL_MS)
     })
@@ -1210,8 +1307,9 @@ const RecordingsView = {
       recordings, shows, total, page, pageSize, totalPages, rangeLabel,
       sortCol, sortDir, statusFilter, showFilter, sinceFilter, deletedFilter,
       statusOptions, sinceOptions, deletedOptions, hasFiltersApplied,
-      deletingId, removingId, purging,
+      deletingId, removingId, purging, adRemovalEnabled, adScanningId,
       refresh, manualRefresh, canDelete, isRecording,
+      canAdScan, adLabel, adTooltip, adScan,
       deleteFromFetch, removeRecording, purgeDeleted,
       setStatus, setShow, setSince, setDeleted, toggleSort, sortMarker,
       se: seasonEpisodeLabel, fmtBytes, fmtTime,
@@ -1418,6 +1516,32 @@ const SettingsView = {
 
         <section class="panel">
           <header class="panel-header">
+            <span class="panel-title">AD REMOVAL</span>
+            <span class="text-xs font-mono text-ink-dim">comskip · optional</span>
+          </header>
+          <div class="panel-body space-y-4">
+            <div class="flex items-center gap-3">
+              <input id="ad-removal-enabled" type="checkbox" class="chk" v-model="adRemovalEnabled" />
+              <label for="ad-removal-enabled" class="text-sm text-ink-dim">
+                Enable ad removal
+                <span class="text-ink-mute">(per-show mode is set on the Shows tab)</span>
+              </label>
+            </div>
+            <div class="field-row md:max-w-xs">
+              <label class="field-label">Keep <code>.orig</code> backups for (days)</label>
+              <input type="number" min="1" class="field-input" v-model="adOriginalRetentionDays" />
+            </div>
+            <p class="text-xs font-mono text-ink-dim">
+              comskip.ini: <code>{{ comskipIniOverride ? '/config/comskip.ini (override)' : 'bundled AU free-to-air default' }}</code>
+            </p>
+            <p class="text-xs text-ink-mute leading-relaxed">
+              Detection runs comskip on each downloaded recording and is CPU-heavy — expect minutes per episode. CUT mode rewrites the file (keyframe stream-copy, no transcode) and keeps the original as <code>&lt;file&gt;.ts.orig</code> until the retention window lapses. Detection accuracy varies by channel; trial DETECT mode before trusting CUT.
+            </p>
+          </div>
+        </section>
+
+        <section class="panel">
+          <header class="panel-header">
             <span class="panel-title">DANGER ZONE</span>
             <span class="text-xs font-mono text-ink-dim">irreversible</span>
           </header>
@@ -1477,6 +1601,9 @@ const SettingsView = {
     const fetchCloudStatus = ref('')
     const fetchCloudStatusKind = ref('ok')
     const deleteAfterPlexRefreshOnly = ref(true)
+    const adRemovalEnabled = ref(false)
+    const adOriginalRetentionDays = ref('7')
+    const comskipIniOverride = ref(false)
     const status = ref('')
     const statusKind = ref('ok')
     const plexStatus = ref('')
@@ -1524,6 +1651,9 @@ const SettingsView = {
       fetchCloudPinSet.value = Boolean(s.fetch_cloud_pin_set)
       fetchCloudTerminalId.value = s.fetch_cloud_terminal_id || ''
       deleteAfterPlexRefreshOnly.value = s.delete_after_plex_refresh_only !== false
+      adRemovalEnabled.value = Boolean(s.ad_removal_enabled)
+      adOriginalRetentionDays.value = s.ad_original_retention_days || '7'
+      comskipIniOverride.value = Boolean(s.comskip_ini_override)
     })
 
     const save = async () => {
@@ -1540,6 +1670,8 @@ const SettingsView = {
           fetch_cloud_activation_code: fetchCloudActivationCode.value,
           fetch_cloud_terminal_id: fetchCloudTerminalId.value,
           delete_after_plex_refresh_only: deleteAfterPlexRefreshOnly.value,
+          ad_removal_enabled: adRemovalEnabled.value,
+          ad_original_retention_days: adOriginalRetentionDays.value,
         }
         if (plexToken.value) body.plex_token = plexToken.value
         if (fetchCloudPin.value) body.fetch_cloud_pin = fetchCloudPin.value
@@ -1763,6 +1895,7 @@ const SettingsView = {
       fetchCloudActivationCode, fetchCloudPin, fetchCloudPinSet,
       fetchCloudTerminalId, fetchCloudTerminals, fetchCloudTesting,
       fetchCloudStatus, fetchCloudStatusKind, deleteAfterPlexRefreshOnly,
+      adRemovalEnabled, adOriginalRetentionDays, comskipIniOverride,
       status, statusKind, plexStatus, plexStatusKind, saving, discovering, candidates,
       nuking, nukeState, reopenWizard,
       mediaRoot, mediaRootTesting, mediaRootStatus, mediaRootStatusKind, testMediaRoot,

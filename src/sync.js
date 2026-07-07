@@ -12,6 +12,7 @@ import {
 import { db, getSetting } from './db.js'
 import { notifyPlexSectionRefresh } from './plex.js'
 import { deleteRecordings as deleteCloudRecordings, FetchCloudError } from './fetch-cloud.js'
+import { processRecordingAds, pruneCutOriginals, shouldQueueAutoDelete } from './commercials.js'
 
 export const getActiveSyncId = () => inFlight?.syncId ?? null
 
@@ -156,9 +157,14 @@ const doSync = async ({ syncId, trigger, showId = null }) => {
 
     for (const item of fetchShow.items || []) {
       try {
-        const outcome = await processItem({ item, show, mediaRoot })
-        summary[outcome]++
-        if (outcome === 'downloaded' && show.delete_after_download) {
+        const { summaryKey, adResult } = await processItem({ item, show, mediaRoot })
+        summary[summaryKey]++
+        if (adResult) accumulateAdSummary(summary, adResult)
+        if (
+          summaryKey === 'downloaded'
+          && show.delete_after_download
+          && shouldQueueAutoDelete({ show, adResult })
+        ) {
           deletables.push({ fetch_id: String(item.id), fetch_title: item.title })
         }
       } catch (err) {
@@ -177,8 +183,8 @@ const doSync = async ({ syncId, trigger, showId = null }) => {
 
 const processItem = async ({ item, show, mediaRoot }) => {
   const existing = await db('recordings').where({ fetch_id: String(item.id) }).first()
-  if (existing?.status === 'done') return 'skipped'
-  if (existing?.deleted_from_fetch_at) return 'skipped'
+  if (existing?.status === 'done') return { summaryKey: 'skipped' }
+  if (existing?.deleted_from_fetch_at) return { summaryKey: 'skipped' }
 
   if (await isCurrentlyRecording(item)) {
     const recoveredSize = item.size === FETCH_DLNA_STALE_SENTINEL
@@ -198,7 +204,7 @@ const processItem = async ({ item, show, mediaRoot }) => {
         status: 'skipped',
         error: 'currently recording',
       })
-      return 'skipped'
+      return { summaryKey: 'skipped' }
     }
   }
 
@@ -235,7 +241,28 @@ const processItem = async ({ item, show, mediaRoot }) => {
   if (outcome.sizeToStore != null) update.size = outcome.sizeToStore
   if (outcome.markDownloadedAt) update.downloaded_at = db.fn.now()
   await db('recordings').where({ fetch_id: String(item.id) }).update(update)
-  return outcome.summaryKey
+
+  let adResult = null
+  if (outcome.dbStatus === 'done' && show.ad_removal !== 'off') {
+    const adRemovalEnabled = (await getSetting('ad_removal_enabled')) === 'true'
+    if (adRemovalEnabled) {
+      adResult = await processRecordingAds({
+        filePath,
+        mode: show.ad_removal,
+        fetchId: String(item.id),
+      })
+    }
+  }
+  return { summaryKey: outcome.summaryKey, adResult }
+}
+
+const accumulateAdSummary = (summary, adResult) => {
+  if (!summary.ads) summary.ads = { scanned: 0, detected: 0, cut: 0, failed: 0, adSeconds: 0 }
+  summary.ads.scanned++
+  if (adResult.status === 'detected') summary.ads.detected++
+  if (adResult.status === 'cut') summary.ads.cut++
+  if (adResult.status === 'detect_failed' || adResult.status === 'cut_failed') summary.ads.failed++
+  summary.ads.adSeconds += adResult.adSeconds
 }
 
 const runAutoDelete = async (deletables, plex) => {
@@ -289,6 +316,7 @@ const finishSync = async (syncId, status, summary) => {
   })
   await pruneSyncHistory()
   await pruneTombstonedRecordings()
+  await pruneCutOriginals()
 }
 
 const pruneTombstonedRecordings = async () => {

@@ -61,7 +61,7 @@ If your media stack is Fetch TV → Plex, Fetcharr is the automation in between:
 
 - ❌ **An indexer integration** (Sonarr / Radarr / Prowlarr): Fetcharr only consumes what Fetch has already recorded; it doesn't tell Fetch *what* to record. Use the box's own EPG to schedule recordings.
 - ❌ **Authenticated:** designed for trusted LAN deployments. CSRF, rate-limiting, and a strict CSP are in place, but there's no login. Don't expose it to the internet (see [Security](#security)).
-- ❌ **A remuxer / transcoder:** files land as `.ts` from the box. Add Tdarr or similar downstream if you need `.mkv`.
+- ❌ **A remuxer / transcoder:** files land as `.ts` from the box and stay `.ts` — the optional ad-cutting is a keyframe stream-copy, not a re-encode. Add Tdarr or similar downstream if you need `.mkv`.
 - ❌ **A notifier:** no Discord / ntfy / push integration.
 
 > [!IMPORTANT]<br>
@@ -77,6 +77,7 @@ If your media stack is Fetch TV → Plex, Fetcharr is the automation in between:
 - **Resumable, truncation-aware downloads**: HTTP Range resume across syncs; if on-disk bytes fall short of what Fetch reported, the row stays `partial` and the next sync picks up the remainder.
 - **Plex integration**: section refresh after every sync that downloaded something, plus a Refresh Plex now button.
 - **Optional delete-from-Fetch**: once Plex confirms the file, free up the box. This goes through Fetch's cloud API because the box's LAN-side delete is broken; [`docs/DEEP_DIVE.md`](docs/DEEP_DIVE.md#why-delete-from-fetch-goes-through-the-cloud-not-lan) has the full story.
+- **Optional ad removal**: comskip-based commercial detection with a detect-only audit mode, keyframe stream-copy cutting (no transcode), and `.orig` backups of every cut file. Off by default; detection accuracy on free-to-air varies by channel, so trial detect mode before trusting cuts. See [`docs/DEEP_DIVE.md`](docs/DEEP_DIVE.md#ad-removal).
 - **Self-housekeeping**: sync history auto-prunes to the latest 500 rows; recording rows age out 30 days after delete-from-Fetch.
 - **TZ-aware UI**: container `TZ` propagates to the browser; timestamps render in that zone regardless of which device hits the page.
 - **Danger Zone**: one-click `NUKE ALL STATE` reset back to the welcome wizard. DB only; downloaded media files untouched.
@@ -154,6 +155,8 @@ The Fetch TV box address and all integration credentials (Plex token, Fetch clou
 
 The full environment reference, including the settings fallback chain, is in [`docs/DEEP_DIVE.md`](docs/DEEP_DIVE.md#full-environment-reference).
 
+**Ad removal** is configured at runtime, not via env: enable it in Settings → AD REMOVAL (off by default), then pick a per-show mode on the Shows tab — `DETECT` records where the ad breaks are without touching the file, `CUT` removes them and keeps the original as `<file>.ts.orig` for a configurable number of days (default 7). Fetcharr ships a comskip.ini tuned for Australian free-to-air; drop your own `comskip.ini` into the `/config` bind mount to override it.
+
 <p align="center">
   <img src="docs/img/screenshot-settings.png" alt="Settings" width="100%"/>
   <br/><em>Settings</em>
@@ -191,6 +194,13 @@ Architecture diagrams, the sync state machine, the delete-from-Fetch cloud ratio
 **Other containers can't reach Fetcharr by name**
 
 - A side-effect of host networking: Fetcharr isn't on any Docker bridge network. Reach it via the host's LAN IP and `FETCHARR_PORT` instead.
+
+**Ad detection is cutting the wrong things (or missing breaks)**
+
+- Commercial detection is heuristic and never perfect. Comskip's accuracy on AU free-to-air varies noticeably by channel (logo detection, silence thresholds, break lengths all differ).
+- Run the show in `DETECT` mode first and check the reported break counts/minutes on the Recordings tab before switching to `CUT`.
+- Cuts snap to keyframes, so a second or two of slop either side of a break is expected.
+- To tune detection, place your own `comskip.ini` in the `/config` bind mount; it overrides the bundled AU-tuned default. Every cut keeps a `<file>.ts.orig` backup for the retention window, so a bad cut is recoverable by renaming the `.orig` back.
 
 **Timestamps show the wrong time**
 
