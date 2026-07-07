@@ -198,7 +198,7 @@ Architecture diagrams, the sync state machine, the delete-from-Fetch cloud ratio
 **Ad detection is cutting the wrong things (or missing breaks)**
 
 - Commercial detection is heuristic and never perfect. Comskip's accuracy on AU free-to-air varies noticeably by channel (logo detection, silence thresholds, break lengths all differ).
-- Run the show in `DETECT` mode first and check the reported break counts/minutes on the Recordings tab before switching to `CUT`.
+- Run the show in `DETECT` mode first and check the reported break counts/minutes on the Recordings tab before switching to `CUT`. Scans are CPU-bound: budget ~30 minutes per 75-minute recording on NAS-class hardware.
 - Cuts snap to keyframes, so a second or two of slop either side of a break is expected.
 - To tune detection, place your own `comskip.ini` in the `/config` bind mount; it overrides the bundled AU-tuned default. Every cut keeps a `<file>.ts.orig` backup for the retention window, so a bad cut is recoverable by renaming the `.orig` back.
 
