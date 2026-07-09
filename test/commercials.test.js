@@ -8,6 +8,8 @@ import {
   comskipScanTimeout,
   resolveComskipIni,
   shouldQueueAutoDelete,
+  expectedScanMs,
+  computeScanPercent,
 } from '../src/commercials.js'
 
 test('parseEdl: happy path with tab-separated action 0 rows', () => {
@@ -162,6 +164,27 @@ test('comskipScanTimeout: scales at 1.5x realtime between the bounds', () => {
 test('comskipScanTimeout: caps at 6 hours for very long recordings', () => {
   assert.equal(comskipScanTimeout({ duration: 14511 }), 6 * 60 * 60 * 1000)
   assert.equal(comskipScanTimeout({ duration: 99999 }), 6 * 60 * 60 * 1000)
+})
+
+test('expectedScanMs: scales duration by the realtime factor and floors', () => {
+  assert.equal(expectedScanMs({ durationSeconds: 0 }), 0)
+  assert.equal(expectedScanMs({ durationSeconds: 4500 }), 4500 * 0.5 * 1000)
+  assert.equal(expectedScanMs({ durationSeconds: 4431 }), Math.floor(4431 * 0.5 * 1000))
+})
+
+test('computeScanPercent: 0 at start, 50 at midpoint', () => {
+  assert.equal(computeScanPercent({ elapsedMs: 0, expectedScanMs: 1_000_000 }), 0)
+  assert.equal(computeScanPercent({ elapsedMs: 500_000, expectedScanMs: 1_000_000 }), 50)
+})
+
+test('computeScanPercent: caps at 99 when the scan over-runs the estimate', () => {
+  assert.equal(computeScanPercent({ elapsedMs: 1_000_000, expectedScanMs: 1_000_000 }), 99)
+  assert.equal(computeScanPercent({ elapsedMs: 5_000_000, expectedScanMs: 1_000_000 }), 99)
+})
+
+test('computeScanPercent: null when the expected duration is unknown', () => {
+  assert.equal(computeScanPercent({ elapsedMs: 5000, expectedScanMs: 0 }), null)
+  assert.equal(computeScanPercent({ elapsedMs: 5000, expectedScanMs: -1 }), null)
 })
 
 test('resolveComskipIni: config override wins', () => {

@@ -5,6 +5,7 @@ import { promisify } from 'util'
 import { fileURLToPath } from 'url'
 
 import { db, getSetting } from './db.js'
+import { setProgress, clearProgress, formatEta } from './progress.js'
 
 export const processRecordingAds = async ({ filePath, mode, fetchId }) => {
   const workdir = adWorkdir(filePath)
@@ -14,18 +15,20 @@ export const processRecordingAds = async ({ filePath, mode, fetchId }) => {
     await db('recordings').where({ fetch_id: fetchId }).update({ ad_status: 'scanning' })
     await fs.rm(workdir, { recursive: true, force: true })
     await fs.mkdir(workdir, { recursive: true })
-    breaks = await detectBreaks({ filePath, workdir })
+    breaks = await detectBreaks({ filePath, workdir, fetchId })
     if (breaks.length === 0) {
       status = 'no_breaks'
     } else if (mode !== 'cut') {
       status = 'detected'
     } else {
-      const newSize = await cutBreaks({ filePath, workdir, breaks })
+      const newSize = await cutBreaks({ filePath, workdir, breaks, fetchId })
       await db('recordings').where({ fetch_id: fetchId }).update({ size: newSize })
       status = 'cut'
     }
   } catch (err) {
     console.error(`[ads] ${path.basename(filePath)}: ${err.message}`)
+  } finally {
+    clearProgress(fetchId)
   }
   await fs.rm(workdir, { recursive: true, force: true }).catch(() => {})
   await fs.rmdir(path.dirname(workdir)).catch(() => {})
@@ -112,6 +115,15 @@ export const comskipScanTimeout = ({ duration }) => {
   return Math.min(MAX_COMSKIP_TIMEOUT_MS, Math.max(MIN_COMSKIP_TIMEOUT_MS, scaled))
 }
 
+export const expectedScanMs = ({ durationSeconds }) =>
+  Math.floor(durationSeconds * SCAN_REALTIME_FACTOR * 1000)
+
+export const computeScanPercent = ({ elapsedMs, expectedScanMs }) => {
+  if (expectedScanMs <= 0) return null
+  const percent = Math.round((elapsedMs / expectedScanMs) * 100)
+  return Math.max(0, Math.min(99, percent))
+}
+
 export const resolveComskipIni = ({ configIniExists }) =>
   configIniExists ? CONFIG_COMSKIP_INI : DEFAULT_COMSKIP_INI
 
@@ -120,17 +132,43 @@ export const shouldQueueAutoDelete = ({ show, adResult }) => {
   return adResult?.status === 'cut' || adResult?.status === 'no_breaks'
 }
 
-const detectBreaks = async ({ filePath, workdir }) => {
+const detectBreaks = async ({ filePath, workdir, fetchId }) => {
   const ini = await prepareIni(workdir)
   const duration = await probeDuration(filePath).catch(() => 0)
   const timeout = comskipScanTimeout({ duration })
-  const failure = await execFileP('nice', [
-    '-n', '10', 'comskip', `--ini=${ini}`, `--output=${workdir}`, filePath,
-  ], { timeout, maxBuffer: SPAWN_MAX_BUFFER }).then(() => null).catch((err) => err)
-  const edlName = `${path.basename(filePath, path.extname(filePath))}.edl`
-  const text = await fs.readFile(path.join(workdir, edlName), 'utf8').catch(() => null)
-  if (text === null) throw new Error(comskipFailureReason({ failure, timeout }))
-  return parseEdl(text).map(({ start, end }) => ({ start, end }))
+  const stopTicker = startScanTicker({ fetchId, durationSeconds: duration })
+  try {
+    const failure = await execFileP('nice', [
+      '-n', '10', 'comskip', `--ini=${ini}`, `--output=${workdir}`, filePath,
+    ], { timeout, maxBuffer: SPAWN_MAX_BUFFER }).then(() => null).catch((err) => err)
+    const edlName = `${path.basename(filePath, path.extname(filePath))}.edl`
+    const text = await fs.readFile(path.join(workdir, edlName), 'utf8').catch(() => null)
+    if (text === null) throw new Error(comskipFailureReason({ failure, timeout }))
+    return parseEdl(text).map(({ start, end }) => ({ start, end }))
+  } finally {
+    stopTicker()
+  }
+}
+
+const startScanTicker = ({ fetchId, durationSeconds }) => {
+  const startedAt = Date.now()
+  const expected = expectedScanMs({ durationSeconds })
+  const writeTick = () => {
+    const elapsedMs = Date.now() - startedAt
+    const percent = computeScanPercent({ elapsedMs, expectedScanMs: expected })
+    const etaSeconds = expected > 0 ? Math.max(0, (expected - elapsedMs) / 1000) : null
+    setProgress(fetchId, {
+      phase: 'scanning',
+      percent,
+      etaSeconds,
+      etaLabel: formatEta(etaSeconds),
+      detail: percent == null ? `${Math.round(elapsedMs / 1000)}s elapsed` : null,
+      startedAt,
+    })
+  }
+  writeTick()
+  const timer = setInterval(writeTick, SCAN_TICK_MS)
+  return () => clearInterval(timer)
 }
 
 const prepareIni = async (workdir) => {
@@ -141,12 +179,19 @@ const prepareIni = async (workdir) => {
   return merged
 }
 
-const cutBreaks = async ({ filePath, workdir, breaks }) => {
+const cutBreaks = async ({ filePath, workdir, breaks, fetchId }) => {
   const duration = await probeDuration(filePath)
   const segments = computeKeepSegments({ breaks, duration })
   if (segments.length === 0) throw new Error('breaks cover the entire recording')
   const segFiles = []
   for (const [i, seg] of segments.entries()) {
+    setProgress(fetchId, {
+      phase: 'cutting',
+      percent: null,
+      etaSeconds: null,
+      etaLabel: null,
+      detail: `segment ${i + 1}/${segments.length}`,
+    })
     const segFile = `seg-${i}.ts`
     await execFileP('ffmpeg', [
       '-hide_banner', '-loglevel', 'error',
@@ -165,6 +210,13 @@ const cutBreaks = async ({ filePath, workdir, breaks }) => {
     '-f', 'concat', '-safe', '0', '-i', listPath,
     '-map', '0', '-c', 'copy', outPath,
   ], { cwd: workdir, timeout: FFMPEG_TIMEOUT_MS, maxBuffer: SPAWN_MAX_BUFFER })
+  setProgress(fetchId, {
+    phase: 'verifying',
+    percent: null,
+    etaSeconds: null,
+    etaLabel: null,
+    detail: null,
+  })
   await verifyCut({ outPath, segments, boundaryCount: breaks.length * 2 })
   await swapInCut({ filePath, outPath })
   const stat = await fs.stat(filePath)
@@ -238,6 +290,8 @@ const DEFAULT_ORIG_RETENTION_DAYS = 7
 const MIN_COMSKIP_TIMEOUT_MS = 60 * 60 * 1000
 const MAX_COMSKIP_TIMEOUT_MS = 6 * 60 * 60 * 1000
 const COMSKIP_TIMEOUT_PER_SECOND_MS = 1500
+const SCAN_REALTIME_FACTOR = 0.5
+const SCAN_TICK_MS = 1000
 const FFMPEG_TIMEOUT_MS = 30 * 60 * 1000
 const FFPROBE_TIMEOUT_MS = 60_000
 const SPAWN_MAX_BUFFER = 16 * 1024 * 1024

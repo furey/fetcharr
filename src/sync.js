@@ -13,6 +13,7 @@ import { db, getSetting } from './db.js'
 import { notifyPlexSectionRefresh } from './plex.js'
 import { deleteRecordings as deleteCloudRecordings, FetchCloudError } from './fetch-cloud.js'
 import { processRecordingAds, pruneCutOriginals, shouldQueueAutoDelete } from './commercials.js'
+import { makeDownloadProgress } from './progress.js'
 
 export const getActiveSyncId = () => inFlight?.syncId ?? null
 
@@ -219,7 +220,12 @@ const processItem = async ({ item, show, mediaRoot }) => {
 
   await fs.mkdir(path.dirname(filePath), { recursive: true })
 
-  const result = await downloadFile({ item, filePath, progressBar: null, overwrite: false })
+  const result = await downloadFile({
+    item,
+    filePath,
+    progressBar: makeDownloadProgress(String(item.id)),
+    overwrite: false,
+  })
 
   let actualSize = null
   if (result.recorded) {
