@@ -209,6 +209,7 @@ app.post(
     } catch (err) {
       const stage = err instanceof FetchCloudError ? err.stage : 'unknown'
       const code = err instanceof FetchCloudError ? err.code : undefined
+      console.error(`[fetch-cloud] delete-from-fetch failed for ${fetchId} (stage ${stage}): ${err.message}`)
       res.status(502).json({ ok: false, error: err.message, stage, code })
     }
   },

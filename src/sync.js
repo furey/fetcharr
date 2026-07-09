@@ -301,6 +301,7 @@ const runAutoDelete = async (deletables, plex) => {
   } catch (err) {
     const stage = err instanceof FetchCloudError ? err.stage : 'unknown'
     const code = err instanceof FetchCloudError ? err.code : undefined
+    console.error(`[fetch-cloud] delete-after-download failed for ${fetchIds.length} recording(s) (stage ${stage}): ${err.message}`)
     return { error: err.message, stage, code, candidates: fetchIds.length }
   }
 }
