@@ -17,10 +17,6 @@ import { makeDownloadProgress } from './progress.js'
 
 export const getActiveSyncId = () => inFlight?.syncId ?? null
 
-export const awaitSync = async () => {
-  if (inFlight) return inFlight.promise
-}
-
 export const startSync = async ({ trigger = 'manual', showId = null } = {}) => {
   if (inFlight) return { syncId: inFlight.syncId, alreadyRunning: true }
 
@@ -95,7 +91,13 @@ export const buildDestPath = ({ item, show, mediaRoot }) => {
     .replaceAll('{season_padded}', seasonPadded)
     .replaceAll('{season_unpadded}', seasonRaw)
   const fileName = `${createValidFilename(item.title)}.${item.ext || 'ts'}`
-  return path.join(mediaRoot, show.dest_folder, seasonDir, fileName)
+  const dest = path.join(mediaRoot, show.dest_folder, seasonDir, fileName)
+  const root = path.resolve(mediaRoot)
+  const resolved = path.resolve(dest)
+  if (resolved !== root && !resolved.startsWith(root + path.sep)) {
+    throw new Error(`destination escapes media root: ${show.dest_folder}/${seasonDir}`)
+  }
+  return dest
 }
 
 const doSync = async ({ syncId, trigger, showId = null }) => {

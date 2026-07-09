@@ -107,13 +107,18 @@ Copy `docker-compose.example.yml` to `docker-compose.yml`, then create a `.env` 
 ```env
 CONFIG_PATH=/path/to/your/config
 DATA_PATH=/path/to/your/media
-PLEX_PREFS_PATH=/path/to/Plex/Preferences.xml   # optional
-CSRF_SECRET=<openssl rand -hex 32>
+CSRF_SECRET=paste-openssl-rand-hex-32
 TZ=Australia/Sydney
 PUID=1000
 PGID=1000
 FETCHARR_PORT=8124
+
+# Optional: only if Plex runs on this host and you want the Auto-detect token
+# button. Leave it out entirely if not — the mount defaults to a no-op.
+# PLEX_PREFS_PATH=/path/to/Plex/Preferences.xml
 ```
+
+`CONFIG_PATH`, `DATA_PATH`, and `CSRF_SECRET` are required; compose stops with a clear message if any is missing rather than starting with broken mounts.
 
 ### 3. Start it
 

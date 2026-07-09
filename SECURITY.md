@@ -4,9 +4,17 @@
 
 Open a private security advisory at https://github.com/furey/fetcharr/security/advisories/new.
 
+## Threat model
+
+Fetcharr is an authless service for a **trusted home LAN**. It has no login: anyone who can reach the port can read configuration and change settings. CSRF, rate limiting, a strict CSP, and `noindex` headers are in place, and cross-origin browser attacks are blocked (no CORS, `SameSite=Strict` cookie, mandatory custom header), but the following are accepted consequences of the design, not defects. Do not expose Fetcharr to the internet.
+
+- **`GET /api/settings` returns configuration to any LAN client.** The Plex token and Fetch Cloud PIN are never returned (they collapse to `*_set` booleans), but the Fetch box IP, Plex URL, media/config paths, and the Fetch Cloud activation code are. The activation code is half of the cloud credential pair (useless without the PIN) and is shown in the UI like an account identifier; on a trusted LAN this is acceptable.
+- **`plex_url` is a server-side request vector.** `POST /api/plex-sections` and `/api/plex-refresh` fetch a caller-supplied URL, so a LAN client can use Fetcharr as a bounded HTTP status oracle against other hosts. Blocking private ranges isn't viable because Plex itself lives on a private LAN address.
+- **No DNS-rebinding / `Host`-header defense.** A trusted-LAN, plain-HTTP service accessed by IP can't meaningfully allowlist `Host`. This is the same class as HSTS being disabled: re-add both when fronting Fetcharr with TLS and a stable hostname.
+
 ## Accepted Residual Risks
 
-After the 2026-05 Dependabot sweep (bumped `fetchtv` to 1.7.3, `fast-xml-parser` to ^4.5.5, `node-cron` to ^4.2.1, overrode `qs` to ^6.15.2), two transitive advisories remain. Both are non-applicable to fetcharr's code paths.
+Fetcharr pins `fetchtv@1.8.2` and overrides `qs` to `^6.15.2`. Two transitive advisories remain in the dependency tree; both are non-applicable to fetcharr's code paths.
 
 ### `ip` — GHSA-2p57-rm9w-gvfp (SSRF via `isPublic` miscategorisation)
 

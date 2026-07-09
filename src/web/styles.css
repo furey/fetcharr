@@ -28,21 +28,6 @@ body {
   background-attachment: fixed;
 }
 
-.deck-divider {
-  background-image: linear-gradient(
-    to right,
-    transparent,
-    #3d3829 8%,
-    #3d3829 92%,
-    transparent
-  );
-  height: 1px;
-}
-
-.hairline-x {
-  border-top: 1px dashed #3d3829;
-}
-
 .led-dot {
   width: 0.6rem;
   height: 0.6rem;

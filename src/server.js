@@ -24,7 +24,12 @@ import {
   deleteRecordings as deleteCloudRecordings,
   FetchCloudError,
 } from './fetch-cloud.js'
-import { startManualAdScan, comskipIniOverrideExists, resetInterruptedScans } from './commercials.js'
+import {
+  startManualAdScan,
+  comskipIniOverrideExists,
+  resetInterruptedScans,
+  recoverInterruptedCuts,
+} from './commercials.js'
 import { snapshotProgress } from './progress.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -365,6 +370,12 @@ app.post('/api/shows', doubleCsrfProtection, async (req, res) => {
   if (ad_removal !== undefined && !AD_REMOVAL_MODES.includes(ad_removal)) {
     return res.status(400).json({ error: `ad_removal must be one of ${AD_REMOVAL_MODES.join(', ')}` })
   }
+  for (const key of ['dest_folder', 'season_template']) {
+    const value = key === 'dest_folder' ? dest_folder : season_template
+    if (value !== undefined && escapesMediaRoot(String(value))) {
+      return res.status(400).json({ error: `${key} must stay within the media root (no '..' or leading '/')` })
+    }
+  }
   const inserted = await db('shows').insert({
     fetch_show_pattern: String(fetch_show_pattern).trim(),
     dest_folder: String(dest_folder).trim(),
@@ -382,7 +393,12 @@ app.patch('/api/shows/:id', doubleCsrfProtection, async (req, res) => {
   const id = Number(req.params.id)
   const patch = {}
   for (const key of ['fetch_show_pattern', 'dest_folder', 'season_template']) {
-    if (req.body?.[key] !== undefined) patch[key] = String(req.body[key]).trim()
+    if (req.body?.[key] === undefined) continue
+    const value = String(req.body[key]).trim()
+    if (key !== 'fetch_show_pattern' && escapesMediaRoot(value)) {
+      return res.status(400).json({ error: `${key} must stay within the media root (no '..' or leading '/')` })
+    }
+    patch[key] = value
   }
   if (req.body?.enabled !== undefined) patch.enabled = Boolean(req.body.enabled)
   if (req.body?.delete_after_download !== undefined) {
@@ -682,17 +698,32 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'web', 'index.html'))
 })
 
+// Terminal error handler: return the message only, never a stack trace, and never
+// fall through to Express' development-mode handler (which leaks node_modules paths
+// and dependency versions when NODE_ENV isn't 'production').
+app.use((err, req, res, next) => {
+  if (res.headersSent) return next(err)
+  const status = err.statusCode || err.status || 500
+  res.status(status).json({ error: err.message || 'internal error' })
+})
+
 const safeJson = (s) => {
   if (!s) return null
   try { return JSON.parse(s) } catch { return null }
 }
 
+const escapesMediaRoot = (value) =>
+  value.startsWith('/')
+  || value.startsWith('\\')
+  || value.split(/[/\\]+/).includes('..')
+
 const server = app.listen(PORT, async () => {
   console.log(`fetcharr listening on http://0.0.0.0:${PORT}`)
   try {
+    await recoverInterruptedCuts()
     await resetInterruptedScans()
   } catch (err) {
-    console.error('[ads] failed to reset interrupted scans:', err.message)
+    console.error('[ads] failed to reconcile interrupted ad processing:', err.message)
   }
   try {
     await startScheduler()
@@ -707,6 +738,13 @@ const shutdown = async () => {
   await db.destroy()
   process.exit(0)
 }
+
+// Express 4 does not route rejections from async route handlers to the error
+// middleware, so a bare `await db(...)` that rejects surfaces here. Log and keep
+// the daemon alive rather than letting Node's default terminate it mid-sync.
+process.on('unhandledRejection', (reason) => {
+  console.error('[server] unhandled rejection:', reason instanceof Error ? reason.stack : reason)
+})
 
 process.on('SIGTERM', shutdown)
 process.on('SIGINT', shutdown)
