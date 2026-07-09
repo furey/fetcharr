@@ -5,6 +5,7 @@ import {
   onMounted,
   onUnmounted,
   watch,
+  nextTick,
 } from '/vendor/vue.esm-browser.prod.js'
 
 let csrfToken = null
@@ -138,6 +139,19 @@ const SummaryLine = {
         </span>
       </template>
     </code>
+  `,
+}
+
+const ProgressBlock = {
+  props: ['progress', 'caption', 'bar'],
+  template: `
+    <div class="progress">
+      <div v-if="bar" class="progress-track">
+        <div class="progress-fill" :class="{ indeterminate: progress.percent == null }"
+          :style="progress.percent == null ? {} : { width: (progress.percent || 0) + '%' }"></div>
+      </div>
+      <span class="progress-caption">{{ caption }}</span>
+    </div>
   `,
 }
 
@@ -340,9 +354,9 @@ const DashboardView = {
         </header>
         <div class="panel-body grid gap-6 md:grid-cols-[1fr_auto] md:items-center">
           <div>
-            <div class="flex items-center gap-4 mb-3">
+            <div class="flex flex-wrap items-center gap-4 mb-3">
               <span :class="['led-dot', syncStatus.activeSyncId ? 'live' : 'idle']"></span>
-              <span :class="['text-4xl', 'font-mono', 'tracking-[0.2em]', syncStatus.activeSyncId ? 'text-signal-magenta' : 'text-ink-dim']">
+              <span :class="['text-3xl', 'md:text-4xl', 'font-mono', 'tracking-[0.2em]', syncStatus.activeSyncId ? 'text-signal-magenta' : 'text-ink-dim']">
                 {{ syncStatus.activeSyncId ? 'SYNC' : 'IDLE' }}
               </span>
               <span v-if="syncStatus.activeSyncId" class="font-mono text-sm text-ink-dim">
@@ -369,14 +383,14 @@ const DashboardView = {
       <section class="grid grid-cols-2 md:grid-cols-4 gap-4">
         <a href="#/shows" class="panel p-5 block text-ink hover:text-ink no-hover-underline hover:border-signal-magenta transition-colors">
           <div class="text-xs font-mono uppercase tracking-[0.16em] text-ink-dim mb-2">Shows</div>
-          <div class="text-4xl font-mono text-ink">{{ showCount }}</div>
+          <div class="text-3xl md:text-4xl font-mono text-ink">{{ showCount }}</div>
           <div class="text-xs text-ink-dim mt-2">
             <span class="text-plex-yellow">{{ showEnabledCount }}</span> enabled
           </div>
         </a>
         <a href="#/recordings" class="panel p-5 block text-ink hover:text-ink no-hover-underline hover:border-signal-magenta transition-colors">
           <div class="text-xs font-mono uppercase tracking-[0.16em] text-ink-dim mb-2">Recordings 7d</div>
-          <div class="text-4xl font-mono text-ink">{{ recordings7dCount }}</div>
+          <div class="text-3xl md:text-4xl font-mono text-ink">{{ recordings7dCount }}</div>
           <div class="text-xs text-ink-dim mt-2">
             <span class="text-plex-yellow">{{ recordingsTotal }}</span> in window
           </div>
@@ -399,7 +413,7 @@ const DashboardView = {
           <a href="#/syncs" class="text-xs font-mono uppercase tracking-[0.16em]">See all →</a>
         </header>
         <div class="panel-body">
-          <table v-if="recentSyncs.length" class="deck-table">
+          <table v-if="recentSyncs.length" class="deck-table hidden md:table">
             <thead><tr>
               <th>Started</th><th>Status</th><th>Summary</th>
             </tr></thead>
@@ -411,6 +425,16 @@ const DashboardView = {
               </tr>
             </tbody>
           </table>
+          <div v-if="recentSyncs.length" class="md:hidden space-y-3">
+            <article v-for="s in recentSyncs" :key="s.id"
+              :class="['deck-card', 'space-y-2', { active: s.id === syncStatus.activeSyncId }]">
+              <div class="flex items-start justify-between gap-3">
+                <span class="deck-card-meta">{{ fmtTime(s.started_at) }}</span>
+                <span :class="['pill', s.status]">{{ s.status }}</span>
+              </div>
+              <summary-line :summary="s.summary"/>
+            </article>
+          </div>
           <p v-else class="text-ink-dim text-sm">No syncs yet.</p>
         </div>
       </section>
@@ -510,7 +534,7 @@ const ShowsView = {
           <span v-if="flashText" :class="['status-readout', flashKind]">{{ flashText }}</span>
         </header>
         <div class="panel-body">
-          <table v-if="shows.length" class="deck-table">
+          <table v-if="shows.length" class="deck-table hidden md:table">
             <thead><tr>
               <th>Show pattern</th>
               <th>Destination</th>
@@ -554,6 +578,42 @@ const ShowsView = {
               </tr>
             </tbody>
           </table>
+          <div v-if="shows.length" class="md:hidden space-y-3">
+            <article v-for="s in shows" :key="s.id" class="deck-card space-y-3">
+              <span class="deck-card-title">{{ s.fetch_show_pattern }}</span>
+              <div class="space-y-1">
+                <p class="deck-card-meta"><span class="deck-card-label">Dest</span> <code>{{ s.dest_folder }}</code></p>
+                <p class="deck-card-meta"><span class="deck-card-label">Seasons</span> <code>{{ s.season_template }}</code></p>
+              </div>
+              <div class="flex flex-wrap items-center gap-x-5 gap-y-2">
+                <label class="flex items-center gap-2 cursor-pointer font-mono text-xs uppercase tracking-[0.08em] text-ink-dim">
+                  <input type="checkbox" class="chk" :checked="s.enabled" @change="toggle(s, $event.target.checked)" />
+                  Enabled
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer font-mono text-xs uppercase tracking-[0.08em] text-ink-dim">
+                  <input type="checkbox" class="chk" :checked="s.delete_after_download" @change="toggleDeleteAfter(s, $event.target.checked)" />
+                  Delete after DL
+                </label>
+              </div>
+              <div class="flex items-center gap-3">
+                <span class="deck-card-label whitespace-nowrap">Ad removal</span>
+                <select class="field-input flex-1" style="padding-top: 0.3rem; padding-bottom: 0.3rem;"
+                  :value="s.ad_removal" :disabled="!adRemovalEnabled"
+                  @change="setAdRemoval(s, $event.target.value)">
+                  <option value="off">OFF</option>
+                  <option value="detect">DETECT</option>
+                  <option value="cut">CUT</option>
+                </select>
+              </div>
+              <div class="grid grid-cols-2 gap-2 pt-1">
+                <button type="button" class="btn justify-center" @click="syncOne(s)"
+                  :disabled="!s.enabled || syncingId === s.id">
+                  {{ syncingId === s.id ? 'STARTING…' : '▶ SYNC' }}
+                </button>
+                <button type="button" class="btn btn-danger justify-center" @click="remove(s)">DELETE</button>
+              </div>
+            </article>
+          </div>
           <p v-else class="text-ink-dim text-sm">
             No shows yet — add one below to start tracking a show.
           </p>
@@ -568,8 +628,8 @@ const ShowsView = {
           <div class="grid gap-4 md:grid-cols-2">
             <div class="field-row">
               <label class="field-label">Fetch show pattern (case-insensitive substring)</label>
-              <div class="flex items-center gap-2">
-                <input type="text" v-model="newPattern" list="fetch-shows" placeholder="e.g. Bluey" class="field-input flex-1" />
+              <div class="flex flex-wrap items-center gap-2">
+                <input type="text" v-model="newPattern" list="fetch-shows" placeholder="e.g. Bluey" class="field-input flex-1 min-w-[12rem]" />
                 <button type="button" class="btn btn-sm" @click="loadFetchShows" :disabled="loadingShows"
                   title="Browse the Fetch TV box to populate this dropdown with current show titles.">
                   {{ loadingShows ? 'BROWSING…' : '↻ REFRESH SHOWS' }}
@@ -818,15 +878,17 @@ const SyncsView = {
             <button type="button" class="btn btn-danger" @click="clearAll" :disabled="!syncs.length">⨯ CLEAR HISTORY</button>
           </div>
 
-          <div class="flex items-center gap-2 flex-wrap">
+          <div class="flex items-center gap-2 min-w-0">
             <span class="text-xs font-mono uppercase tracking-[0.16em] text-ink-dim">ACTIVITY</span>
-            <button v-for="opt in filterOptions" :key="opt.key"
-              type="button"
-              :class="['btn', 'btn-sm', filter === opt.key ? 'btn-primary' : '']"
-              @click="setFilter(opt.key)">{{ opt.label }}</button>
+            <div class="chip-row md:flex-wrap">
+              <button v-for="opt in filterOptions" :key="opt.key"
+                type="button"
+                :class="['btn', 'btn-sm', filter === opt.key ? 'btn-primary' : '']"
+                @click="setFilter(opt.key)">{{ opt.label }}</button>
+            </div>
           </div>
 
-          <table v-if="syncs.length" class="deck-table">
+          <table v-if="syncs.length" class="deck-table hidden md:table">
             <thead><tr>
               <th>Started</th><th>Finished</th><th>Status</th><th>Summary</th><th></th>
             </tr></thead>
@@ -849,6 +911,25 @@ const SyncsView = {
               </tr>
             </tbody>
           </table>
+          <div v-if="syncs.length" class="md:hidden space-y-3">
+            <article v-for="s in syncs" :key="s.id"
+              :class="['deck-card', 'space-y-2', { active: s.id === syncStatus.activeSyncId }]">
+              <div class="flex items-start justify-between gap-3">
+                <span :class="['pill', s.status]">{{ s.status }}</span>
+                <button type="button" class="btn btn-sm btn-icon btn-danger"
+                  :disabled="s.id === syncStatus.activeSyncId"
+                  @click="removeSync(s)">
+                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M3 5h10M6.5 5V3h3v2M4.5 5l.7 8.5h5.6L11.5 5M6.5 7.5v4M9.5 7.5v4"/>
+                  </svg>
+                </button>
+              </div>
+              <p class="deck-card-meta">
+                {{ fmtTime(s.started_at) }}<template v-if="s.finished_at"> → {{ fmtTime(s.finished_at) }}</template>
+              </p>
+              <summary-line :summary="s.summary"/>
+            </article>
+          </div>
           <p v-else class="text-ink-dim text-sm">
             {{ filter === 'all' ? 'No syncs yet.' : 'No syncs match the current filter.' }}
           </p>
@@ -957,7 +1038,7 @@ const RecordingsView = {
       <section class="panel">
         <header class="panel-header">
           <span class="panel-title">RECORDINGS · {{ rangeLabel }} of {{ total }}</span>
-          <div class="flex items-center gap-3">
+          <div class="flex flex-wrap items-center gap-3">
             <span v-if="flashText" :class="['status-readout', flashKind]">{{ flashText }}</span>
             <button type="button" class="btn btn-sm btn-danger" @click="purgeDeleted"
               :disabled="purging"
@@ -968,13 +1049,15 @@ const RecordingsView = {
           </div>
         </header>
         <div class="panel-body space-y-4">
-          <div class="flex flex-wrap items-center gap-x-6 gap-y-3">
-            <div class="flex items-center gap-2">
+          <div class="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-center md:gap-x-6">
+            <div class="flex items-center gap-2 min-w-0">
               <span class="text-xs font-mono uppercase tracking-[0.16em] text-ink-dim">STATUS</span>
-              <button v-for="opt in statusOptions" :key="opt"
-                type="button"
-                :class="['btn', 'btn-sm', statusFilter === opt ? 'btn-primary' : '']"
-                @click="setStatus(opt)">{{ opt.toUpperCase() }}</button>
+              <div class="chip-row md:flex-wrap">
+                <button v-for="opt in statusOptions" :key="opt"
+                  type="button"
+                  :class="['btn', 'btn-sm', statusFilter === opt ? 'btn-primary' : '']"
+                  @click="setStatus(opt)">{{ opt.toUpperCase() }}</button>
+              </div>
             </div>
             <div class="flex items-center gap-2">
               <span class="text-xs font-mono uppercase tracking-[0.16em] text-ink-dim">SHOW</span>
@@ -984,25 +1067,29 @@ const RecordingsView = {
                 <option v-for="s in shows" :key="s.id" :value="s.id">{{ s.fetch_show_pattern }}</option>
               </select>
             </div>
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-2 min-w-0">
               <span class="text-xs font-mono uppercase tracking-[0.16em] text-ink-dim">WHEN</span>
-              <button v-for="opt in sinceOptions" :key="opt.key"
-                type="button"
-                :class="['btn', 'btn-sm', sinceFilter === opt.key ? 'btn-primary' : '']"
-                @click="setSince(opt.key)">{{ opt.label }}</button>
+              <div class="chip-row md:flex-wrap">
+                <button v-for="opt in sinceOptions" :key="opt.key"
+                  type="button"
+                  :class="['btn', 'btn-sm', sinceFilter === opt.key ? 'btn-primary' : '']"
+                  @click="setSince(opt.key)">{{ opt.label }}</button>
+              </div>
             </div>
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-2 min-w-0">
               <span class="text-xs font-mono uppercase tracking-[0.16em] text-ink-dim">ON FETCH</span>
-              <button v-for="opt in deletedOptions" :key="opt.key"
-                type="button"
-                :class="['btn', 'btn-sm', deletedFilter === opt.key ? 'btn-primary' : '']"
-                @click="setDeleted(opt.key)">{{ opt.label }}</button>
+              <div class="chip-row md:flex-wrap">
+                <button v-for="opt in deletedOptions" :key="opt.key"
+                  type="button"
+                  :class="['btn', 'btn-sm', deletedFilter === opt.key ? 'btn-primary' : '']"
+                  @click="setDeleted(opt.key)">{{ opt.label }}</button>
+              </div>
             </div>
           </div>
           <p class="text-xs font-mono text-ink-mute">
             Legend: <span class="tombstone-legend">struck-through + dim</span> = deleted from the Fetch TV box.
           </p>
-          <table v-if="recordings.length" class="deck-table">
+          <table v-if="recordings.length" class="deck-table hidden md:table">
             <thead><tr>
               <th class="sortable" @click="toggleSort('show_pattern')">Show{{ sortMarker('show_pattern') }}</th>
               <th class="sortable" @click="toggleSort('fetch_title')">Title{{ sortMarker('fetch_title') }}</th>
@@ -1027,23 +1114,14 @@ const RecordingsView = {
                     <span :class="['pill', r.status]">{{ r.status }}</span>
                     <span v-if="r.error" class="block text-xs font-mono text-signal-magenta-hi mt-1">{{ r.error }}</span>
                   </template>
-                  <div v-if="progressPhase(r) === 'downloading'" class="progress">
-                    <div class="progress-track">
-                      <div class="progress-fill" :style="{ width: (r.progress.percent || 0) + '%' }"></div>
-                    </div>
-                    <span class="progress-caption">{{ progressCaption(r) }}</span>
-                  </div>
+                  <progress-block v-if="progressPhase(r) === 'downloading'"
+                    :progress="r.progress" :caption="progressCaption(r)" :bar="true"/>
                 </td>
                 <td>
                   <span v-if="r.ad_status" :class="['pill', r.ad_status]" :title="adTooltip(r)">{{ adLabel(r.ad_status) }}</span>
                   <span v-else-if="!progressPhase(r)" class="text-ink-mute">—</span>
-                  <div v-if="isAdProgress(r)" class="progress">
-                    <div v-if="hasBar(r)" class="progress-track">
-                      <div class="progress-fill" :class="{ indeterminate: r.progress.percent == null }"
-                        :style="r.progress.percent == null ? {} : { width: r.progress.percent + '%' }"></div>
-                    </div>
-                    <span class="progress-caption">{{ progressCaption(r) }}</span>
-                  </div>
+                  <progress-block v-if="isAdProgress(r)"
+                    :progress="r.progress" :caption="progressCaption(r)" :bar="hasBar(r)"/>
                 </td>
                 <td class="font-mono whitespace-nowrap">{{ fmtTime(r.downloaded_at) }}</td>
                 <td>
@@ -1079,10 +1157,60 @@ const RecordingsView = {
               </tr>
             </tbody>
           </table>
+          <div v-if="recordings.length" class="md:hidden space-y-3">
+            <article v-for="r in recordings" :key="r.fetch_id"
+              :class="['deck-card', 'space-y-2', { tombstone: r.deleted_from_fetch_at }]">
+              <div class="flex items-start justify-between gap-3">
+                <span class="deck-card-title">{{ r.fetch_title }}</span>
+                <span v-if="isRecording(r)" class="pill recording">RECORDING</span>
+                <span v-else :class="['pill', r.status]">{{ r.status }}</span>
+              </div>
+              <p class="deck-card-meta">
+                {{ r.show_pattern || '—' }}<template v-if="se(r)"> · {{ se(r) }}</template><template v-if="fmtBytes(r.size)"> · {{ fmtBytes(r.size) }}</template><template v-if="r.downloaded_at"> · {{ fmtTime(r.downloaded_at) }}</template>
+              </p>
+              <p v-if="r.deleted_from_fetch_at" class="deck-card-meta">
+                deleted from Fetch {{ fmtTime(r.deleted_from_fetch_at) }}
+              </p>
+              <p v-if="r.error && !isRecording(r)" class="text-xs font-mono text-signal-magenta-hi">{{ r.error }}</p>
+              <div v-if="r.ad_status" class="flex flex-wrap items-center gap-2">
+                <span :class="['pill', r.ad_status]">{{ adLabel(r.ad_status) }}</span>
+                <span v-if="adTooltip(r)" class="deck-card-meta">{{ adTooltip(r) }}</span>
+              </div>
+              <progress-block v-if="progressPhase(r) === 'downloading'"
+                :progress="r.progress" :caption="progressCaption(r)" :bar="true"/>
+              <progress-block v-if="isAdProgress(r)"
+                :progress="r.progress" :caption="progressCaption(r)" :bar="hasBar(r)"/>
+              <div v-if="canAdScan(r) || canDelete(r) || r.deleted_from_fetch_at" class="flex items-center justify-end gap-2 pt-1">
+                <button v-if="canAdScan(r)" type="button" class="btn btn-sm btn-icon"
+                  @click="adScan(r)" :disabled="adScanningId === r.fetch_id">
+                  <span v-if="adScanningId === r.fetch_id">…</span>
+                  <svg v-else viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="4" cy="4.5" r="1.75"/>
+                    <circle cx="4" cy="11.5" r="1.75"/>
+                    <path d="M5.5 5.75 13 12M5.5 10.25 13 4"/>
+                  </svg>
+                </button>
+                <button v-if="canDelete(r)" type="button" class="btn btn-sm btn-icon btn-danger"
+                  @click="deleteFromFetch(r)" :disabled="deletingId === r.fetch_id">
+                  <span v-if="deletingId === r.fetch_id">…</span>
+                  <svg v-else viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M3 5h10M6.5 5V3h3v2M4.5 5l.7 8.5h5.6L11.5 5M6.5 7.5v4M9.5 7.5v4"/>
+                  </svg>
+                </button>
+                <button v-else-if="r.deleted_from_fetch_at" type="button" class="btn btn-sm btn-icon btn-danger"
+                  @click="removeRecording(r)" :disabled="removingId === r.fetch_id">
+                  <span v-if="removingId === r.fetch_id">…</span>
+                  <svg v-else viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M3 5h10M6.5 5V3h3v2M4.5 5l.7 8.5h5.6L11.5 5M6.5 7.5v4M9.5 7.5v4"/>
+                  </svg>
+                </button>
+              </div>
+            </article>
+          </div>
           <p v-else-if="total === 0" class="text-ink-dim text-sm">
             {{ hasFiltersApplied ? 'No recordings match the current filters.' : 'No recordings tracked yet.' }}
           </p>
-          <div v-if="total > pageSize" class="flex items-center justify-between gap-3 font-mono text-xs text-ink-dim pt-1">
+          <div v-if="total > pageSize" class="flex flex-wrap items-center justify-between gap-3 font-mono text-xs text-ink-dim pt-1">
             <span>Page {{ page }} of {{ totalPages }} · {{ total }} total</span>
             <div class="flex items-center gap-2">
               <button type="button" class="btn btn-sm" :disabled="page <= 1" @click="page = page - 1">← PREV</button>
@@ -1371,7 +1499,7 @@ const SettingsView = {
           <button type="button" class="btn" @click="reopenWizard">↻ REOPEN WIZARD</button>
         </div>
       </section>
-      <form @submit.prevent="save" class="space-y-6 pb-20">
+      <form @submit.prevent="save" class="space-y-6 pb-24">
         <section class="panel">
           <header class="panel-header">
             <span class="panel-title">FETCH TV BOX</span>
@@ -1601,7 +1729,7 @@ const SettingsView = {
         </section>
 
         <div class="settings-save-bar">
-          <div class="max-w-6xl mx-auto px-6 py-3 flex items-center justify-between gap-3">
+          <div class="max-w-6xl mx-auto px-4 md:px-6 py-3 flex items-center justify-between gap-3">
             <span v-if="status" :class="['status-readout', statusKind]">{{ status }}</span>
             <span v-else class="text-xs font-mono text-ink-mute">Changes apply on save · scheduler reloads if <code>sync_cron</code> changed.</span>
             <button type="submit" class="btn btn-primary" :disabled="saving">
@@ -2488,9 +2616,9 @@ const TABS = [
 
 const App = {
   template: `
-    <div class="min-h-screen flex flex-col">
+    <div class="min-h-dvh flex flex-col">
       <header class="sticky top-0 z-20 backdrop-blur-md bg-surface-deep/85 border-b border-hairline">
-        <div class="max-w-6xl mx-auto px-6">
+        <div class="max-w-6xl mx-auto px-4 md:px-6">
           <div class="flex items-center justify-between gap-4 py-3">
             <a href="#/dashboard" class="no-hover-underline flex items-center gap-3 no-underline text-ink">
               <svg viewBox="0 0 15.5 3" :class="['brand-mark', 'w-[39px]', 'h-[8px]', 'shrink-0', { syncing: syncStatus.activeSyncId }]" aria-hidden="true">
@@ -2517,23 +2645,23 @@ const App = {
               </div>
             </div>
           </div>
-          <nav class="flex flex-wrap items-end gap-4 pt-1">
+          <nav class="tab-strip pt-1">
             <a v-for="t in tabs" :key="t.key"
               :href="'#/' + t.key"
               :data-active="route === t.key"
-              :class="['tab-led', 'block', 'px-1', 'py-2', 'font-mono', 'text-sm', 'tracking-[0.2em]', route === t.key ? 'text-ink' : 'text-ink-dim hover:text-ink']">
+              :class="['tab-led', 'block', 'whitespace-nowrap', 'px-1', 'py-2', 'font-mono', 'text-sm', 'tracking-[0.2em]', route === t.key ? 'text-ink' : 'text-ink-dim hover:text-ink']">
               {{ t.label }}
             </a>
           </nav>
         </div>
       </header>
 
-      <main class="flex-1 max-w-6xl w-full mx-auto px-6 py-8">
+      <main class="flex-1 max-w-6xl w-full mx-auto px-4 py-5 md:px-6 md:py-8">
         <component :is="currentView" :key="route" />
       </main>
 
       <footer class="border-t border-hairline">
-        <div class="max-w-6xl mx-auto px-6 py-4 flex flex-wrap items-center justify-between gap-3 text-xs font-mono text-ink-mute">
+        <div class="max-w-6xl mx-auto px-4 md:px-6 py-4 flex flex-wrap items-center justify-between gap-3 text-xs font-mono text-ink-mute">
           <span><a href="/#dashboard" class="no-underline text-ink">Fetcharr</a> · self-hosted sync from your Fetch TV box to Plex</span>
           <a
             href="https://github.com/furey/fetcharr"
@@ -2552,6 +2680,11 @@ const App = {
   `,
   setup() {
     const currentView = computed(() => VIEW_MAP[route.value] || DashboardView)
+    watch(route, async () => {
+      await nextTick()
+      document.querySelector('.tab-strip [data-active="true"]')
+        ?.scrollIntoView({ inline: 'nearest', block: 'nearest' })
+    }, { immediate: true })
     return {
       route, tabs: TABS, currentView,
       syncStatus, clockReadout, tzShortName,
@@ -2579,4 +2712,5 @@ fetchSyncStatus().then(ensureSyncPolling)
 
 const app = createApp(App)
 app.component('summary-line', SummaryLine)
+app.component('progress-block', ProgressBlock)
 app.mount('#app')

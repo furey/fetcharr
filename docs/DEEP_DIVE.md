@@ -9,6 +9,7 @@ The technical companion to [`README.md`](../README.md): what Fetcharr is doing u
 - [Why delete-from-Fetch goes through the cloud, not LAN](#why-delete-from-fetch-goes-through-the-cloud-not-lan)
 - [Ad removal](#ad-removal)
 - [Live progress indicators](#live-progress-indicators)
+- [Mobile layout](#mobile-layout)
 - [Full environment reference](#full-environment-reference)
 - [Docker deployment](#docker-deployment)
 - [`fetchtv` dependency](#fetchtv-dependency)
@@ -160,6 +161,22 @@ The frontend renders a thin CSS bar plus a `percent · ETA` caption under the re
 
 This is a feedback layer only; it changes nothing in the ad-removal pipeline. The scan bar is an estimate that drifts with content and hardware, which is acceptable for a bar that reads "≈60%, ~11 min left" instead of a 30-minute spinner. A self-calibrating `SCAN_REALTIME_FACTOR` (a rolling `actualScanSeconds / contentSeconds` per box) and, if drift still bites, parsing comskip's stdout are deferred follow-ups.
 
+## Mobile layout
+
+The UI is responsive at a single breakpoint: Tailwind's `md` (768 px). Below it, phone layout (baseline iPhone 16e, 390×844 pt); at or above it, the desktop layout, unchanged.
+
+The load-bearing decision is how the `deck-table` views (7-column Shows, 8-column Recordings, plus the two syncs tables) behave on a phone. They use **dual markup**: the desktop `<table>` sits behind `hidden md:table` and a purpose-built `deck-card` list renders behind `md:hidden` in the same Vue template. Rows are entity-shaped (title + metadata + actions), so cards fit; a CSS-only `data-label` table transform was rejected because the control-heavy cells (per-row buttons, selects, headerless action columns) come out unordered and ugly. Cell logic stays shared through the existing helpers (`summary-line`, pills, `fmtTime`/`fmtBytes`) plus the `progress-block` component, which both the desktop table and the cards render so the bar markup exists once. Two accepted losses on mobile: no column sorting (the server-side `downloaded_at desc` default applies), and `title`-attribute tooltips don't exist on touch, so the load-bearing one (ad break count + minutes) is inlined into the card and the rest are dropped.
+
+Filter button groups (Recordings' four, Syncs' activity row) become `chip-row`s below `md`: single-line, horizontally scrollable, hidden scrollbar, non-shrinking children. The tab nav is the same pattern (`tab-strip`), with a `watch(route)` + `scrollIntoView` nudge so the active tab is always visible.
+
+The rest is a CSS pass in `styles.css`, all standard iOS Safari accommodations:
+
+- `.field-input` bumps to `16 px` below `md` — iOS auto-zooms (and stays zoomed) on focusing any input smaller than that.
+- `viewport-fit=cover` in the meta tag plus `env(safe-area-inset-bottom)` on the settings save bar and footer, so the home indicator doesn't cover the SAVE button; `min-h-dvh` instead of `min-h-screen` for the collapsing URL bar.
+- Every `:hover` rule is scoped inside `@media (hover: hover)` — otherwise taps leave sticky hover states.
+- Under `@media (pointer: coarse)`, buttons and checkboxes grow to Apple's 44 pt hit-target guideline (padding only; icon sizes unchanged).
+- `-webkit-tap-highlight-color: transparent`, since controls have their own pressed states.
+
 ## Full environment reference
 
 The Fetch TV box IP/port and all integration credentials (Plex token, Fetch cloud activation code, etc.) are runtime settings; configure them in the web UI (or the first-run wizard), not via env. The env vars below are deploy/runtime knobs only.
@@ -281,7 +298,7 @@ fetcharr/
 │   ├── scheduler.js        # node-cron wiring, reloads on settings change
 │   ├── plex.js             # Plex section refresh + token detection from Preferences.xml
 │   ├── fetch-cloud.js      # Fetch cloud WebSocket client for delete-from-box
-│   └── web/                # Static UI; Vue 3 SPA (browser ESM) + Tailwind v4 Play CDN (self-hosted), hash-routed across 5 tabs, no build step
+│   └── web/                # Static UI; Vue 3 SPA (browser ESM) + Tailwind v4 Play CDN (self-hosted), hash-routed across 5 tabs, responsive at md/768px, no build step
 ├── test/
 │   ├── sync.test.js        # node --test: matchShow, buildDestPath, classifyOutcome state-transition truth table
 │   ├── commercials.test.js # node --test: EDL parsing, keep-segment math, tolerance, delete gating, ini resolution, scan-estimate math
@@ -344,7 +361,7 @@ The wider sync flow (DB transitions, `downloadFile` invocation, Plex notify) is 
 
 ## Regenerating the README screenshots
 
-The PNGs under `docs/img/` are captured from the running app by `scripts/capture-screenshots.sh`. The script pulls the official Playwright Docker image (no host install required), drives headless Chromium across all five tabs, and writes the screenshots back into `docs/img/` with the right ownership.
+The PNGs under `docs/img/` are captured from the running app by `scripts/capture-screenshots.sh`. The script pulls the official Playwright Docker image (no host install required), drives headless Chromium across all five tabs at desktop width plus Dashboard/Shows/Recordings at a 390×844 mobile viewport (`screenshot-mobile-*.png`), and writes the screenshots back into `docs/img/` with the right ownership.
 
 ```sh
 # fetcharr container must be up + reachable at $FETCHARR_URL (default http://localhost:8124)
@@ -359,7 +376,7 @@ PLAYWRIGHT_IMAGE=mcr.microsoft.com/playwright:v1.50.0-noble \
   ./scripts/capture-screenshots.sh
 ```
 
-The captures themselves are configured in `scripts/capture-screenshots.mjs` (viewport 1280×936, viewport-only clip so every shot has the same aspect ratio, 2× device-scale). Before the Settings shot, the script rewrites the `/api/settings` response in-page so no real box IP, Plex URL, host paths, or Fetch cloud credentials reach a committed PNG.
+The captures themselves are configured in `scripts/capture-screenshots.mjs` (desktop viewport 1280×936, mobile 390×844, viewport-only clip so every shot has the same aspect ratio, 2× device-scale). `SHOT_FILTER=mobile` re-shoots just the mobile set. Before the Settings shot, the script rewrites the `/api/settings` response in-page so no real box IP, Plex URL, host paths, or Fetch cloud credentials reach a committed PNG.
 
 > [!TIP]<br>
 > To shoot UI changes that haven't shipped yet, run them locally against a copy of the live database — every panel renders from SQLite and the settings row, so the shots come out identical to production. Copy the state file off the deploy host (`ssh <host> 'cat /path/to/fetcharr/state.db' > /tmp/shots.db`; `scp` fails on Synology's restricted sftp subsystem), start the server with `DB_PATH=/tmp/shots.db CSRF_SECRET=$(openssl rand -hex 32) node src/server.js`, then point the capture script at your machine's LAN IP rather than `localhost` (the Playwright container can't reach the host loopback). Two cautions: the scheduler starts with the copied `sync_cron`, so capture outside the cron window or a real sync will fire against the live Fetch box, and delete the copy afterwards — it holds the Plex token and Fetch cloud PIN.
