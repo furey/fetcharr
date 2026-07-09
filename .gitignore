@@ -1,6 +1,7 @@
 node_modules/
 config/
 tmp/
+docker-compose.yml
 *.db
 *.db-journal
 *.db-shm

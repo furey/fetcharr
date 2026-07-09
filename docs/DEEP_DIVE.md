@@ -116,7 +116,7 @@ The feature is double-gated: a global `ad_removal_enabled` setting (Settings →
 1. `ffprobe` reads the container duration; `computeKeepSegments` inverts the merged, clamped break list into keep segments. An empty keep list (breaks covering the whole file) is treated as a failure — Fetcharr never produces an empty output.
 2. Each keep segment is extracted with `ffmpeg -ss … -to … -c copy`, mapping only the video, audio and subtitle streams (`-map 0:v -map 0:a -map 0:s?`). AU DVB-T recordings carry a private data stream the mpegts muxer can't stream-copy, so a blanket `-map 0` aborts the cut; dropping that stream is harmless for playback. Keyframe stream-copy, no transcode; output stays `.ts`, then the segments are concatenated with ffmpeg's concat demuxer. All intermediate files live in a hidden `.fetcharr-adcut/` workdir next to the recording — same filesystem, so the final swap is an atomic rename, and hidden so Plex ignores it. The workdir is removed on every exit path.
 3. **Verify then swap**: the output must be non-empty and its ffprobe duration must match the summed keep-segment duration within a tolerance that scales with boundary count (`max(5, 2 × boundaries)` seconds — keyframe snapping costs up to a couple of seconds per cut point). Only then does the swap happen: original → `<file>.ts.orig`, output → original name; if the second rename fails the `.orig` is rolled back. Plex ignores the unknown `.orig` extension.
-4. Any failure at any step leaves the original file exactly where it was and marks the row `cut_failed`; the sync carries on.
+4. Any caught failure at any step leaves the original file exactly where it was and marks the row `cut_failed`; the sync carries on. The one gap the rollback can't cover is a process death *between* the two renames of the swap (original → `.ts.orig`, then output → original), which would leave no file at the real path. `recoverInterruptedCuts` on startup closes it: for any recording row whose `file_path` is missing on disk but whose `<file>.ts.orig` exists, it renames the `.orig` back, so a crash mid-swap self-heals on the next boot.
 
 `.orig` backups are pruned after a configurable retention window (`ad_original_retention_days`, default 7) during sync housekeeping, giving a recovery window for bad cuts (rename the `.orig` back).
 
@@ -124,7 +124,7 @@ The feature is double-gated: a global `ad_removal_enabled` setting (Settings →
 
 **comskip.ini resolution**: Fetcharr bundles `assets/comskip.ini`, tuned for Australian free-to-air DVB-T (detection method, break-length windows, brightness/silence thresholds, logo detection). Detect-mode runs against real Network 10 captures (July 2026) found the expected pattern — five 2.5–4-minute ad blocks per ~75-minute episode plus occasional pre-roll/tail slivers — so the bundled ini is a sane default for at least that channel; others remain untested. If `comskip.ini` exists in the config dir (the `/config` bind mount), it wins. `GET /api/settings` reports which one is active and the Settings panel displays it.
 
-**Manual scans**: `POST /api/recordings/:fetch_id/ad-scan` (re)processes an already-downloaded recording using the show's mode (detect-only when the show is `off`), so existing files can be trialled without redownloading. The endpoint responds `202` immediately and processes in the background; one manual scan runs at a time, and the UI polls the recordings list for the resulting `ad_status`.
+**Manual scans**: `POST /api/recordings/:fetch_id/ad-scan` (re)processes an already-downloaded recording using the show's mode (detect-only when the show is `off`), so existing files can be trialled without redownloading. The endpoint responds `202` immediately and processes in the background; the UI polls the recordings list for the resulting `ad_status`. Both entry points — this endpoint and the sync loop's inline call — share one single-flight guard, a module-level `Set` keyed by `fetch_id` inside `processRecordingAds`. A given recording is therefore only ever processed by one `comskip`/`ffmpeg` pipeline at a time (the endpoint returns `409` if that recording is already in flight), which is what prevents a sync-triggered cut and a manual scan from colliding on the shared workdir and `.ts.orig`. Different recordings may still process concurrently.
 
 Comskip is CPU-bound — expect roughly half an hour for a 75-minute 1080i broadcast `.ts` (~2.7 GB) on NAS-class hardware. The scan timeout scales with the recording's duration (1.5× realtime, 60-minute floor, 6-hour cap) so a long recording — a 4-hour sports broadcast, say — isn't killed mid-scan and misreported as producing no EDL. It's spawned via `nice -n 10` so a scan doesn't starve the box of I/O for concurrent downloads, and per-recording statuses (`scanning`, `detected`, `no_breaks`, `cut`, `detect_failed`, `cut_failed`) surface on the Recordings tab. A scan interrupted by a restart leaves no stuck `scanning` row — startup resets any in-flight status back to unscanned. While a scan or cut is in flight the row also shows a live progress bar, described next.
 
@@ -158,7 +158,7 @@ Lifecycle is owned in one place so no path leaks an entry. The scan ticker clear
 
 The frontend renders a thin CSS bar plus a `percent · ETA` caption under the relevant pill (download under Status, scan/cut under Ads), and reuses the existing pill cell so nothing shifts when the bar appears or vanishes. The recordings poll is a self-scheduling `setTimeout` that recomputes its cadence every tick from the freshly fetched rows: `RECORDINGS_ACTIVE_POLL_MS` (2 s) when any row has a non-null `progress`, `RECORDINGS_POLL_MS` (60 s) otherwise, so it always falls back to idle once operations end. A restart mid-operation leaves no frozen bar: the registry is empty on boot and `resetInterruptedScans` has already cleared any persisted `scanning` row.
 
-This is a feedback layer only; it changes nothing in the ad-removal pipeline. The scan bar is an estimate that drifts with content and hardware, which is acceptable for a bar that reads "≈60%, ~11 min left" instead of a 30-minute spinner. A self-calibrating `SCAN_REALTIME_FACTOR` (a rolling `actualScanSeconds / contentSeconds` per box) and, if drift still bites, parsing comskip's stdout are deferred follow-ups. One known adjacent gap: sync-triggered scans call `processRecordingAds` directly and bypass the `manualScanInFlight` single-flight flag, so a manual scan can start a second concurrent `comskip`; the registry keys by `fetch_id` and copes, but the overlap is a separate defect worth closing.
+This is a feedback layer only; it changes nothing in the ad-removal pipeline. The scan bar is an estimate that drifts with content and hardware, which is acceptable for a bar that reads "≈60%, ~11 min left" instead of a 30-minute spinner. A self-calibrating `SCAN_REALTIME_FACTOR` (a rolling `actualScanSeconds / contentSeconds` per box) and, if drift still bites, parsing comskip's stdout are deferred follow-ups.
 
 ## Full environment reference
 
@@ -235,6 +235,9 @@ Vulnerability reporting and the accepted residual risks from the transitive-depe
 - **HTTP**: Helmet with a strict CSP. `script-src 'self' 'unsafe-eval'` is required because Vue's in-browser template compiler uses `new Function()`; everything else is locked down. To drop `'unsafe-eval'` we would need a build step (Vite) that pre-compiles templates.
 - **Rate limiting**: `express-rate-limit` on the on-demand POST endpoints that hit the Fetch box, Fetch cloud, or Plex (`/api/sync`, `/api/fetch-shows`, `/api/discover-fetch`, `/api/discover-plex`, `/api/fetch-cloud-test`).
 - **CSRF**: `csrf-csrf` (double-submit cookie) protects state-changing POSTs. The UI fetches a token from `GET /api/csrf-token` and sends it as the `x-csrf-token` header. `generateToken` is called with `overwrite=true` so a stale browser cookie from a previous `CSRF_SECRET` doesn't trigger a 403 mint. `getSessionIdentifier` is a constant (authless LAN service, and `req.ip` flapped under Docker bridge networking). The front-end clears the cached token and retries once on any 403, so secret rotations and cookie clears recover silently.
+- **Path containment**: `dest_folder` and `season_template` are validated on write (`POST`/`PATCH /api/shows`) to reject `..` segments and leading slashes, and `buildDestPath` resolves the final path and throws if it escapes the media root. A show can only ever write inside the configured library.
+- **Fail-closed production defaults**: the Dockerfile sets `NODE_ENV=production`, so even a bare `docker run` (without the compose env) refuses the dev CSRF secret. A terminal Express error handler returns the error message only — never a stack trace — regardless of `NODE_ENV`.
+- **Daemon resilience**: a `process.on('unhandledRejection')` handler logs and keeps the process alive, so a DB-layer rejection in an async route handler can't take the whole daemon (and any in-flight sync or cut) down.
 - **Indexing**: `X-Robots-Tag: noindex, nofollow` is set globally; this is a LAN-only service.
 - **HSTS disabled**: Fetcharr serves over plain HTTP on the LAN. Helmet's default `Strict-Transport-Security` header would tell browsers to refuse HTTP for the host for a year, which is wrong for this deployment. Re-enable HSTS (with an appropriate `maxAge`) only when fronted by TLS.
 
@@ -248,6 +251,8 @@ npm run setup              # ci --ignore-scripts + rebuild natives + audit signa
 npm start                  # http://localhost:8124; first visit shows the setup wizard
                            # (prestart auto-creates ./config/ and runs migrations)
 ```
+
+`npm start` / `npm run dev` load `./.env` via Node's `--env-file-if-exists`, so the `CSRF_SECRET` you set there applies to the from-source run. The Docker path doesn't use `.env.example` at all — it takes its environment from the compose file.
 
 > [!NOTE]<br>
 > `npm run setup` calls `npm audit signatures`, which honours `.npmrc`'s `min-release-age=3`. If a dep in the lockfile was published in the last 3 days, the audit step will fail (`ETARGET notarget`). Either wait for it to age past the threshold or run `npm install --ignore-scripts --min-release-age=0` once for the freshly-published dep.
@@ -284,8 +289,7 @@ fetcharr/
 │   └── folder-matcher.test.js # node --test: real on-disk fixture under os.tmpdir()
 ├── assets/
 │   └── comskip.ini         # Bundled AU free-to-air comskip tuning; /config/comskip.ini overrides
-├── migrations/
-│   └── 0001_initial.js     # Initial schema; additive migrations from here on
+├── migrations/             # 0001_initial + additive migrations (purged_at, ad_removal)
 ├── knexfile.js             # Honours DB_PATH env (defaults to ./config/state.db)
 ├── Dockerfile              # node:22-bookworm-slim + tini + comskip + ffmpeg + healthcheck
 ├── docker-entrypoint.sh    # `knex migrate:latest` then `exec node src/server.js`
@@ -306,8 +310,8 @@ fetcharr/
 | `npm run rebuild:natives` | Explicitly rebuilds the native deps allow-listed in `package.json` (just `better-sqlite3`) |
 | `npm run migrate`         | `mkdir -p config && knex migrate:latest`; idempotent, auto-run by `start` / `dev`          |
 | `npm run migrate:refresh` | `rm -f ./config/state.db && mkdir -p config && knex migrate:latest`; dev only              |
-| `npm start`               | `node src/server.js` (chains `npm run migrate` via `prestart`)                             |
-| `npm run dev`             | `node --watch src/server.js` (chains `npm run migrate` via `predev`)                       |
+| `npm start`               | `node --env-file-if-exists=.env src/server.js` (chains `npm run migrate` via `prestart`)   |
+| `npm run dev`             | `node --env-file-if-exists=.env --watch src/server.js` (chains `npm run migrate` via `predev`) |
 | `npm test`                | `node --test 'test/*.test.js'`; Node 22 built-in runner, no extra deps                     |
 
 ## Testing
@@ -320,7 +324,7 @@ npm test
 
 It uses Node 22's built-in test runner (`node --test`), with no additional test dependencies. Four files under `test/`:
 
-- **`test/sync.test.js`**: exhaustive truth-table coverage of `classifyOutcome` (every state-machine transition, including the real-world MPEG-TS 20-byte-delta case and `-1` sentinel handling), plus pure-function tests for `matchShow` (case-insensitive substring matching) and `buildDestPath` (`{season}` / `{season_padded}` / `{season_unpadded}` substitution, filesystem-safe filename sanitisation, missing-season fallback).
+- **`test/sync.test.js`**: exhaustive truth-table coverage of `classifyOutcome` (every state-machine transition, including the real-world MPEG-TS 20-byte-delta case and the `expectedSize <= 0` / `-1` guard branch), plus pure-function tests for `matchShow` (case-insensitive substring matching) and `buildDestPath` (`{season}` / `{season_padded}` / `{season_unpadded}` substitution, missing-season fallback, and that the built filename carries no path separator — the deeper title sanitisation is `fetchtv`'s `createValidFilename`). The `-1` *currently-recording* detection itself lives in `fetchtv.isCurrentlyRecording` and is not covered here.
 - **`test/commercials.test.js`**: pure-function coverage of the ad-removal decision logic — EDL parsing (malformed rows, action filtering), keep-segment math (clamping, merging, break-at-edge, whole-file-break), cut verification tolerance, comskip.ini resolution, the auto-delete gating matrix, and the scan-estimate math (`expectedScanMs` scaling, `computeScanPercent` clamp at 99 and null-on-unknown-duration).
 - **`test/progress.test.js`**: the progress registry — `setProgress`/`getProgress` round-trip, staleness eviction past `PROGRESS_STALE_MS` (via mocked timers), `clearProgress`, and the `makeDownloadProgress` shim's percent and monotonically decreasing ETA.
 - **`test/folder-matcher.test.js`**: real on-disk fixture under `os.tmpdir()` exercising `listShowFolders` + `matchShowFolder` against realistic disambiguated folder names (`Bluey (2018)`, `LOL - Last One Laughing UK`, etc.).

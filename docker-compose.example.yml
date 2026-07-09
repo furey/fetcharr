@@ -1,14 +1,17 @@
 # Example docker-compose for fetcharr.
 #
 # Copy to `docker-compose.yml`, then create a `.env` file alongside it with:
-#   CONFIG_PATH=/path/to/your/config
-#   DATA_PATH=/path/to/your/media
-#   PLEX_PREFS_PATH=/path/to/Plex/Preferences.xml   # optional
-#   CSRF_SECRET=<openssl rand -hex 32>
+#   CONFIG_PATH=/path/to/your/config          # required
+#   DATA_PATH=/path/to/your/media             # required
+#   CSRF_SECRET=paste-openssl-rand-hex-32     # required (openssl rand -hex 32)
+#   PLEX_PREFS_PATH=/path/to/Plex/Preferences.xml   # optional; leave unset if no local Plex
 #   TZ=Australia/Sydney
 #   PUID=1000
 #   PGID=1000
 #   FETCHARR_PORT=8124
+#
+# CONFIG_PATH, DATA_PATH and CSRF_SECRET are required: compose fails fast with a
+# message if any is unset, rather than silently mounting the wrong host paths.
 #
 # `network_mode: host` is required: SSDP/UPnP auto-discovery of the Fetch TV box
 # uses multicast on 239.255.255.250:1900, which does NOT traverse Docker's bridge
@@ -32,11 +35,13 @@ services:
       - TZ=${TZ:-UTC}
       - DB_PATH=/config/state.db
       - MEDIA_ROOT=/media/tv
-      - CSRF_SECRET=${CSRF_SECRET}
+      - CSRF_SECRET=${CSRF_SECRET:?set CSRF_SECRET in your .env (openssl rand -hex 32)}
       # Only set if you want the "Auto-detect from local Plex" button to work:
       - PLEX_PREFS_PATH=/plex-preferences.xml
     volumes:
-      - ${CONFIG_PATH}/fetcharr:/config
-      - ${DATA_PATH}/media/tv:/media/tv
-      # Remove this line if you don't have Plex running on the same host:
-      - ${PLEX_PREFS_PATH}:/plex-preferences.xml:ro
+      - ${CONFIG_PATH:?set CONFIG_PATH in your .env}/fetcharr:/config
+      - ${DATA_PATH:?set DATA_PATH in your .env}/media/tv:/media/tv
+      # Plex Preferences.xml, read-only, only for the "Auto-detect token" button.
+      # Defaults to /dev/null when PLEX_PREFS_PATH is unset, so leaving it blank is
+      # safe (the button just degrades). Set it only if Plex runs on this host.
+      - ${PLEX_PREFS_PATH:-/dev/null}:/plex-preferences.xml:ro
