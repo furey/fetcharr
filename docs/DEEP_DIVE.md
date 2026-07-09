@@ -295,6 +295,9 @@ fetcharr/
 └── package.json            # fetchtv installed from npm (pinned exactly)
 ```
 
+> [!NOTE]<br>
+> `src/web/styles.css` is a plain, unlayered stylesheet, while the Tailwind browser build emits its utilities inside `@layer utilities`. Unlayered rules beat layered ones no matter the specificity, so a bare element selector in `styles.css` (`a { color: #4ebef0 }`) overrides any Tailwind colour utility applied to an `<a>`. To restyle a link, add a class to `styles.css` (as `.icon-link` does for the footer's GitHub mark) or move the utility onto an inner `<span>`.
+
 ## Scripts
 
 | Script                    | What it does                                                                               |
@@ -332,7 +335,7 @@ The wider sync flow (DB transitions, `downloadFile` invocation, Plex notify) is 
 - **Settings**: save / discover; cron field reloads the scheduler on save; Plex Auto-discover / Auto-detect token / Load sections / Refresh now buttons should each succeed when Plex is reachable; Storage panel TEST PATH probes `media_root` for existence + writability.
 - **Shows**: on first visit (no shows yet, Fetch IP configured) auto-runs Refresh Shows to populate the datalist. Add a show (folder-suggest auto-completes from the effective `media_root`, falls back to a "new folder" suggestion when no match), toggle enabled, per-show Sync now, delete.
 - **Syncs**: Run sync now (global + per-show), watch the row appear and finish; clear individual or all history; chip-filter by activity type (DOWNLOADS / FAILS / DELETES / EMPTY).
-- **Recordings**: rows update live during a sync — a download/scan/cut in flight shows a progress bar and the list polls every 2 s, falling back to 60 s once nothing is active; sizes render in the configured `TZ` in 12-hour AM/PM. Tombstoned rows (deleted from the Fetch box) appear struck-through and dimmed; filter via `ON FETCH` / `DELETED` chips; `WHEN` includes `1H` / `24H` for recent activity.
+- **Recordings**: rows update live during a sync — a download/scan/cut in flight shows a progress bar and the list polls every 2 s, falling back to 60 s once nothing is active; sizes render in the configured `TZ` in 12-hour AM/PM. Tombstoned rows (deleted from the Fetch box) appear struck-through and dimmed, except for pills, buttons, and progress bars — a tombstoned recording can still be re-scanned and re-cut from the downloaded file, so its progress text must stay legible; filter via `ON FETCH` / `DELETED` chips; `WHEN` includes `1H` / `24H` for recent activity.
 - **Danger Zone**: `NUKE ALL STATE` button clears the DB and reloads into the wizard.
 
 ## Regenerating the README screenshots
@@ -353,3 +356,6 @@ PLAYWRIGHT_IMAGE=mcr.microsoft.com/playwright:v1.50.0-noble \
 ```
 
 The captures themselves are configured in `scripts/capture-screenshots.mjs` (viewport 1280×936, viewport-only clip so every shot has the same aspect ratio, 2× device-scale). Before the Settings shot, the script rewrites the `/api/settings` response in-page so no real box IP, Plex URL, host paths, or Fetch cloud credentials reach a committed PNG.
+
+> [!TIP]<br>
+> To shoot UI changes that haven't shipped yet, run them locally against a copy of the live database — every panel renders from SQLite and the settings row, so the shots come out identical to production. Copy the state file off the deploy host (`ssh <host> 'cat /path/to/fetcharr/state.db' > /tmp/shots.db`; `scp` fails on Synology's restricted sftp subsystem), start the server with `DB_PATH=/tmp/shots.db CSRF_SECRET=$(openssl rand -hex 32) node src/server.js`, then point the capture script at your machine's LAN IP rather than `localhost` (the Playwright container can't reach the host loopback). Two cautions: the scheduler starts with the copied `sync_cron`, so capture outside the cron window or a real sync will fire against the live Fetch box, and delete the copy afterwards — it holds the Plex token and Fetch cloud PIN.
