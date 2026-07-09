@@ -78,6 +78,7 @@ If your media stack is Fetch TV → Plex, Fetcharr is the automation in between:
 - **Plex integration**: section refresh after every sync that downloaded something, plus a Refresh Plex now button.
 - **Optional delete-from-Fetch**: once Plex confirms the file, free up the box. This goes through Fetch's cloud API because the box's LAN-side delete is broken; [`docs/DEEP_DIVE.md`](docs/DEEP_DIVE.md#why-delete-from-fetch-goes-through-the-cloud-not-lan) has the full story.
 - **Optional ad removal**: comskip-based commercial detection with a detect-only audit mode, keyframe stream-copy cutting (no transcode), and `.orig` backups of every cut file. Off by default; detection accuracy on free-to-air varies by channel, so trial detect mode before trusting cuts. See [`docs/DEEP_DIVE.md`](docs/DEEP_DIVE.md#ad-removal).
+- **Live operation progress**: downloads, ad scans, and cuts report inline in the Recordings tab (a download bar with byte rate and ETA, a duration-estimated scan bar that counts down, a cut segment counter); the list polls every 2 s while anything is active instead of the idle 60 s. See [`docs/DEEP_DIVE.md`](docs/DEEP_DIVE.md#live-progress-indicators).
 - **Self-housekeeping**: sync history auto-prunes to the latest 500 rows; recording rows age out 30 days after delete-from-Fetch.
 - **TZ-aware UI**: container `TZ` propagates to the browser; timestamps render in that zone regardless of which device hits the page.
 - **Danger Zone**: one-click `NUKE ALL STATE` reset back to the welcome wizard. DB only; downloaded media files untouched.
