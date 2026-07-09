@@ -245,7 +245,8 @@ table.deck-table tbody tr.tombstone td {
   text-decoration-thickness: 1px;
 }
 table.deck-table tbody tr.tombstone .pill,
-table.deck-table tbody tr.tombstone .btn {
+table.deck-table tbody tr.tombstone .btn,
+table.deck-table tbody tr.tombstone .progress {
   text-decoration: none;
 }
 
@@ -514,6 +515,16 @@ a:hover {
 
 .tab-led:hover,
 .no-hover-underline:hover {
+  text-decoration: none;
+}
+
+a.icon-link {
+  color: #544e47;
+  transition: color 0.15s ease;
+}
+
+a.icon-link:hover {
+  color: #8b837e;
   text-decoration: none;
 }
 
