@@ -60,6 +60,9 @@ export const pruneCutOriginals = async () => {
   }
 }
 
+export const resetInterruptedScans = async () =>
+  db('recordings').where({ ad_status: 'scanning' }).update({ ad_status: null })
+
 export const comskipIniOverrideExists = async () => {
   try {
     await fs.access(CONFIG_COMSKIP_INI)
@@ -104,6 +107,11 @@ export const computeKeepSegments = ({ breaks, duration }) => {
 
 export const cutVerificationTolerance = (boundaryCount) => Math.max(5, 2 * boundaryCount)
 
+export const comskipScanTimeout = ({ duration }) => {
+  const scaled = Math.round(duration) * COMSKIP_TIMEOUT_PER_SECOND_MS
+  return Math.min(MAX_COMSKIP_TIMEOUT_MS, Math.max(MIN_COMSKIP_TIMEOUT_MS, scaled))
+}
+
 export const resolveComskipIni = ({ configIniExists }) =>
   configIniExists ? CONFIG_COMSKIP_INI : DEFAULT_COMSKIP_INI
 
@@ -114,12 +122,14 @@ export const shouldQueueAutoDelete = ({ show, adResult }) => {
 
 const detectBreaks = async ({ filePath, workdir }) => {
   const ini = await prepareIni(workdir)
-  await execFileP('nice', [
+  const duration = await probeDuration(filePath).catch(() => 0)
+  const timeout = comskipScanTimeout({ duration })
+  const failure = await execFileP('nice', [
     '-n', '10', 'comskip', `--ini=${ini}`, `--output=${workdir}`, filePath,
-  ], { timeout: COMSKIP_TIMEOUT_MS, maxBuffer: SPAWN_MAX_BUFFER }).catch(() => {})
+  ], { timeout, maxBuffer: SPAWN_MAX_BUFFER }).then(() => null).catch((err) => err)
   const edlName = `${path.basename(filePath, path.extname(filePath))}.edl`
   const text = await fs.readFile(path.join(workdir, edlName), 'utf8').catch(() => null)
-  if (text === null) throw new Error('comskip produced no EDL')
+  if (text === null) throw new Error(comskipFailureReason({ failure, timeout }))
   return parseEdl(text).map(({ start, end }) => ({ start, end }))
 }
 
@@ -141,7 +151,7 @@ const cutBreaks = async ({ filePath, workdir, breaks }) => {
     await execFileP('ffmpeg', [
       '-hide_banner', '-loglevel', 'error',
       '-ss', String(seg.start), '-to', String(seg.end),
-      '-i', filePath, '-map', '0', '-c', 'copy',
+      '-i', filePath, '-map', '0:v', '-map', '0:a', '-map', '0:s?', '-c', 'copy',
       '-avoid_negative_ts', 'make_zero',
       path.join(workdir, segFile),
     ], { timeout: FFMPEG_TIMEOUT_MS, maxBuffer: SPAWN_MAX_BUFFER })
@@ -201,6 +211,12 @@ const originalRetentionDays = async () => {
   return Number.isInteger(days) && days > 0 ? days : DEFAULT_ORIG_RETENTION_DAYS
 }
 
+const comskipFailureReason = ({ failure, timeout }) => {
+  if (failure?.killed) return `comskip timed out after ${Math.round(timeout / 1000)}s`
+  if (failure) return `comskip failed: ${failure.message.split('\n')[0]}`
+  return 'comskip produced no EDL'
+}
+
 const totalBreakSeconds = (breaks) =>
   Math.round(breaks.reduce((sum, b) => sum + (b.end - b.start), 0))
 
@@ -219,7 +235,9 @@ const DEFAULT_COMSKIP_INI = path.join(__dirname, '..', 'assets', 'comskip.ini')
 const WORKDIR_NAME = '.fetcharr-adcut'
 const ORIG_SUFFIX = '.orig'
 const DEFAULT_ORIG_RETENTION_DAYS = 7
-const COMSKIP_TIMEOUT_MS = 60 * 60 * 1000
+const MIN_COMSKIP_TIMEOUT_MS = 60 * 60 * 1000
+const MAX_COMSKIP_TIMEOUT_MS = 6 * 60 * 60 * 1000
+const COMSKIP_TIMEOUT_PER_SECOND_MS = 1500
 const FFMPEG_TIMEOUT_MS = 30 * 60 * 1000
 const FFPROBE_TIMEOUT_MS = 60_000
 const SPAWN_MAX_BUFFER = 16 * 1024 * 1024

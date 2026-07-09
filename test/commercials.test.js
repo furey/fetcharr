@@ -5,6 +5,7 @@ import {
   parseEdl,
   computeKeepSegments,
   cutVerificationTolerance,
+  comskipScanTimeout,
   resolveComskipIni,
   shouldQueueAutoDelete,
 } from '../src/commercials.js'
@@ -145,6 +146,22 @@ test('cutVerificationTolerance: scales at 2s per boundary above the floor', () =
   assert.equal(cutVerificationTolerance(3), 6)
   assert.equal(cutVerificationTolerance(4), 8)
   assert.equal(cutVerificationTolerance(10), 20)
+})
+
+test('comskipScanTimeout: floors at 60 minutes for short recordings', () => {
+  assert.equal(comskipScanTimeout({ duration: 0 }), 60 * 60 * 1000)
+  assert.equal(comskipScanTimeout({ duration: 1200 }), 60 * 60 * 1000)
+  assert.equal(comskipScanTimeout({ duration: 2400 }), 60 * 60 * 1000)
+})
+
+test('comskipScanTimeout: scales at 1.5x realtime between the bounds', () => {
+  assert.equal(comskipScanTimeout({ duration: 3600 }), 3600 * 1500)
+  assert.equal(comskipScanTimeout({ duration: 4431 }), 4431 * 1500)
+})
+
+test('comskipScanTimeout: caps at 6 hours for very long recordings', () => {
+  assert.equal(comskipScanTimeout({ duration: 14511 }), 6 * 60 * 60 * 1000)
+  assert.equal(comskipScanTimeout({ duration: 99999 }), 6 * 60 * 60 * 1000)
 })
 
 test('resolveComskipIni: config override wins', () => {
