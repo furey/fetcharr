@@ -516,3 +516,43 @@ a:hover {
 .no-hover-underline:hover {
   text-decoration: none;
 }
+
+.progress {
+  margin-top: 0.4rem;
+  min-width: 7rem;
+  max-width: 12rem;
+}
+
+.progress-track {
+  height: 3px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: 9999px;
+  background: #009be4;
+  transition: width 0.3s ease;
+}
+
+.progress-fill.indeterminate {
+  width: 40%;
+  animation: progress-indeterminate 1.2s ease-in-out infinite;
+}
+
+@keyframes progress-indeterminate {
+  0%   { margin-left: -40%; }
+  100% { margin-left: 100%; }
+}
+
+.progress-caption {
+  display: block;
+  margin-top: 0.3rem;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  color: #8b837e;
+  white-space: nowrap;
+}

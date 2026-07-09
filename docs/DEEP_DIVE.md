@@ -8,6 +8,7 @@ The technical companion to [`README.md`](../README.md): what Fetcharr is doing u
 - [Sync state machine](#sync-state-machine)
 - [Why delete-from-Fetch goes through the cloud, not LAN](#why-delete-from-fetch-goes-through-the-cloud-not-lan)
 - [Ad removal](#ad-removal)
+- [Live progress indicators](#live-progress-indicators)
 - [Full environment reference](#full-environment-reference)
 - [Docker deployment](#docker-deployment)
 - [`fetchtv` dependency](#fetchtv-dependency)
@@ -125,7 +126,39 @@ The feature is double-gated: a global `ad_removal_enabled` setting (Settings →
 
 **Manual scans**: `POST /api/recordings/:fetch_id/ad-scan` (re)processes an already-downloaded recording using the show's mode (detect-only when the show is `off`), so existing files can be trialled without redownloading. The endpoint responds `202` immediately and processes in the background; one manual scan runs at a time, and the UI polls the recordings list for the resulting `ad_status`.
 
-Comskip is CPU-bound — expect roughly half an hour for a 75-minute 1080i broadcast `.ts` (~2.7 GB) on NAS-class hardware. The scan timeout scales with the recording's duration (1.5× realtime, 60-minute floor, 6-hour cap) so a long recording — a 4-hour sports broadcast, say — isn't killed mid-scan and misreported as producing no EDL. It's spawned via `nice -n 10` so a scan doesn't starve the box of I/O for concurrent downloads, and per-recording statuses (`scanning`, `detected`, `no_breaks`, `cut`, `detect_failed`, `cut_failed`) surface on the Recordings tab. A scan interrupted by a restart leaves no stuck `scanning` row — startup resets any in-flight status back to unscanned.
+Comskip is CPU-bound — expect roughly half an hour for a 75-minute 1080i broadcast `.ts` (~2.7 GB) on NAS-class hardware. The scan timeout scales with the recording's duration (1.5× realtime, 60-minute floor, 6-hour cap) so a long recording — a 4-hour sports broadcast, say — isn't killed mid-scan and misreported as producing no EDL. It's spawned via `nice -n 10` so a scan doesn't starve the box of I/O for concurrent downloads, and per-recording statuses (`scanning`, `detected`, `no_breaks`, `cut`, `detect_failed`, `cut_failed`) surface on the Recordings tab. A scan interrupted by a restart leaves no stuck `scanning` row — startup resets any in-flight status back to unscanned. While a scan or cut is in flight the row also shows a live progress bar, described next.
+
+## Live progress indicators
+
+A download, an ad scan, and a cut are all slow and, without help, opaque: the Recordings tab used to poll every 60 seconds and show a static `downloading` or `scanning` pill for the whole run. `src/progress.js` closes that gap with a small in-memory progress registry that the three operations feed and `GET /api/recordings` merges into each row. No new persistence, no WebSocket, no extra dependency; the tab just polls faster while something is active.
+
+The registry is a module-level `Map` keyed by `fetch_id`, shared by every request handler and the sync loop because it's all one Node process. Entries are ephemeral, present only while an operation runs:
+
+```javascript
+{
+  phase: 'downloading' | 'scanning' | 'cutting' | 'verifying',
+  percent: number | null,   // 0..100, or null when the phase is indeterminate
+  etaSeconds: number | null,
+  etaLabel: string | null,  // preformatted with pretty-ms; the SPA has no build step
+  detail: string | null,    // '12.4 MB/s', 'segment 2/5', '18s elapsed'
+  startedAt: number,
+  updatedAt: number,
+}
+```
+
+`setProgress(fetchId, patch)` shallow-merges and stamps `updatedAt`; `clearProgress(fetchId)` deletes; `getProgress(fetchId)` returns the entry or `null` if it's missing or older than `PROGRESS_STALE_MS` (30 s), deleting it on staleness; `snapshotProgress(fetchIds)` collects the fresh entries for the API merge. The staleness guard is the backstop for a process that dies before its cleanup runs: a leaked entry stops being served within 30 seconds instead of showing a frozen bar forever. Labels that the SPA would otherwise need a bundler to format (rate strings, ETA durations) are preformatted server-side.
+
+Two of the three sources already existed and were being thrown away:
+
+- **Download**: `fetchtv`'s `downloadFile({ progressBar })` already computes value/total/speed/ETA and calls `setTotal`/`update`/`getTotal`/`stop` every 250 ms; the server previously passed `progressBar: null`. `makeDownloadProgress(fetchId)` is a shim matching that interface that recomputes rate and ETA and writes a `downloading` entry, reusing `fetchtv`'s `filesize` speed string as the `detail`. `fetchtv` returns early for "currently recording" or zero-size items, so no bar appears for those.
+- **Cut**: `cutBreaks` already loops over keep segments, so `segment i/N` is free; it writes a `cutting` entry per segment and flips to `verifying` before the duration check. Stream-copy is seconds per segment, so a counter is more honest than a bar and neither phase carries a percentage.
+- **Scan**: `comskip` runs through a buffered `execFileP` and emits no live signal, so the bar is a duration-based estimate rather than parsed output. `detectBreaks` already probes duration (for the timeout); a 1-second ticker writes `percent = clamp(0, 99, elapsed / expectedScanMs × 100)` where `expectedScanMs = durationSeconds × SCAN_REALTIME_FACTOR × 1000`. `SCAN_REALTIME_FACTOR` is `0.5`, deliberately above the measured ~0.39 on the NAS so the bar under-promises; it clamps at 99 so it never claims done while comskip is still running, and holds there if the scan over-runs. If the duration probe failed the scan entry is indeterminate (`percent: null`) with an elapsed count-up caption. `computeScanPercent` and `expectedScanMs` are pure exports, unit-tested in `test/commercials.test.js`.
+
+Lifecycle is owned in one place so no path leaks an entry. The scan ticker clears its own `setInterval` in a `finally` inside `detectBreaks`; `processRecordingAds` clears the registry entry in a single `finally` around the whole detect/cut sequence; the download shim clears on `stop()`. On the API side, `GET /api/recordings` calls `snapshotProgress(rows.map(r => r.fetch_id))` and attaches `progress` (the entry or `null`) to each row without mutating the query result. Rows with nothing active carry `progress: null`.
+
+The frontend renders a thin CSS bar plus a `percent · ETA` caption under the relevant pill (download under Status, scan/cut under Ads), and reuses the existing pill cell so nothing shifts when the bar appears or vanishes. The recordings poll is a self-scheduling `setTimeout` that recomputes its cadence every tick from the freshly fetched rows: `RECORDINGS_ACTIVE_POLL_MS` (2 s) when any row has a non-null `progress`, `RECORDINGS_POLL_MS` (60 s) otherwise, so it always falls back to idle once operations end. A restart mid-operation leaves no frozen bar: the registry is empty on boot and `resetInterruptedScans` has already cleared any persisted `scanning` row.
+
+This is a feedback layer only; it changes nothing in the ad-removal pipeline. The scan bar is an estimate that drifts with content and hardware, which is acceptable for a bar that reads "≈60%, ~11 min left" instead of a 30-minute spinner. A self-calibrating `SCAN_REALTIME_FACTOR` (a rolling `actualScanSeconds / contentSeconds` per box) and, if drift still bites, parsing comskip's stdout are deferred follow-ups. One known adjacent gap: sync-triggered scans call `processRecordingAds` directly and bypass the `manualScanInFlight` single-flight flag, so a manual scan can start a second concurrent `comskip`; the registry keys by `fetch_id` and copes, but the overlap is a separate defect worth closing.
 
 ## Full environment reference
 
@@ -239,13 +272,15 @@ fetcharr/
 │   ├── folder-matcher.js   # Fuse.js wrapper that scans /media/tv
 │   ├── sync.js             # Sync engine; discover, browse, match shows, download, persist; exports classifyOutcome / matchShow / buildDestPath for tests
 │   ├── commercials.js      # Ad removal; comskip detect + ffmpeg cut orchestration, pure helpers exported for tests
+│   ├── progress.js         # In-memory progress registry + fetchtv download-bar shim; merged into GET /api/recordings
 │   ├── scheduler.js        # node-cron wiring, reloads on settings change
 │   ├── plex.js             # Plex section refresh + token detection from Preferences.xml
 │   ├── fetch-cloud.js      # Fetch cloud WebSocket client for delete-from-box
 │   └── web/                # Static UI; Vue 3 SPA (browser ESM) + Tailwind v4 Play CDN (self-hosted), hash-routed across 5 tabs, no build step
 ├── test/
 │   ├── sync.test.js        # node --test: matchShow, buildDestPath, classifyOutcome state-transition truth table
-│   ├── commercials.test.js # node --test: EDL parsing, keep-segment math, tolerance, delete gating, ini resolution
+│   ├── commercials.test.js # node --test: EDL parsing, keep-segment math, tolerance, delete gating, ini resolution, scan-estimate math
+│   ├── progress.test.js    # node --test: registry set/get/staleness/clear + download-shim percent/ETA
 │   └── folder-matcher.test.js # node --test: real on-disk fixture under os.tmpdir()
 ├── assets/
 │   └── comskip.ini         # Bundled AU free-to-air comskip tuning; /config/comskip.ini overrides
@@ -280,10 +315,11 @@ Run the automated suite with:
 npm test
 ```
 
-It uses Node 22's built-in test runner (`node --test`), with no additional test dependencies. Three files under `test/`:
+It uses Node 22's built-in test runner (`node --test`), with no additional test dependencies. Four files under `test/`:
 
 - **`test/sync.test.js`**: exhaustive truth-table coverage of `classifyOutcome` (every state-machine transition, including the real-world MPEG-TS 20-byte-delta case and `-1` sentinel handling), plus pure-function tests for `matchShow` (case-insensitive substring matching) and `buildDestPath` (`{season}` / `{season_padded}` / `{season_unpadded}` substitution, filesystem-safe filename sanitisation, missing-season fallback).
-- **`test/commercials.test.js`**: pure-function coverage of the ad-removal decision logic — EDL parsing (malformed rows, action filtering), keep-segment math (clamping, merging, break-at-edge, whole-file-break), cut verification tolerance, comskip.ini resolution, and the auto-delete gating matrix.
+- **`test/commercials.test.js`**: pure-function coverage of the ad-removal decision logic — EDL parsing (malformed rows, action filtering), keep-segment math (clamping, merging, break-at-edge, whole-file-break), cut verification tolerance, comskip.ini resolution, the auto-delete gating matrix, and the scan-estimate math (`expectedScanMs` scaling, `computeScanPercent` clamp at 99 and null-on-unknown-duration).
+- **`test/progress.test.js`**: the progress registry — `setProgress`/`getProgress` round-trip, staleness eviction past `PROGRESS_STALE_MS` (via mocked timers), `clearProgress`, and the `makeDownloadProgress` shim's percent and monotonically decreasing ETA.
 - **`test/folder-matcher.test.js`**: real on-disk fixture under `os.tmpdir()` exercising `listShowFolders` + `matchShowFolder` against realistic disambiguated folder names (`Bluey (2018)`, `LOL - Last One Laughing UK`, etc.).
 
 The comskip/ffmpeg orchestration in `src/commercials.js` is exercised end-to-end inside the Docker image rather than mocked. To repeat that check: synthesize a `.ts` with ffmpeg (long `testsrc2` program segments around 30-second "ad" blocks separated by ~2s of black + silence), then call `processRecordingAds` against it in the container. One caveat learned the hard way: comskip's fuzzy scorer won't flag synthetic ad blocks with the bundled AU ini (no logo, non-standard block lengths keep scores under its 1.05 threshold) — drop a `/config/comskip.ini` containing `detect_method=1` plus `punish=1` / `punish_threshold=1.2` / `punish_modifier=4` so the brighter ad blocks cross the threshold. That override path doubles as a test of the ini-resolution logic.
@@ -296,7 +332,7 @@ The wider sync flow (DB transitions, `downloadFile` invocation, Plex notify) is 
 - **Settings**: save / discover; cron field reloads the scheduler on save; Plex Auto-discover / Auto-detect token / Load sections / Refresh now buttons should each succeed when Plex is reachable; Storage panel TEST PATH probes `media_root` for existence + writability.
 - **Shows**: on first visit (no shows yet, Fetch IP configured) auto-runs Refresh Shows to populate the datalist. Add a show (folder-suggest auto-completes from the effective `media_root`, falls back to a "new folder" suggestion when no match), toggle enabled, per-show Sync now, delete.
 - **Syncs**: Run sync now (global + per-show), watch the row appear and finish; clear individual or all history; chip-filter by activity type (DOWNLOADS / FAILS / DELETES / EMPTY).
-- **Recordings**: rows update live during a sync and re-poll every 60 s otherwise; sizes render in the configured `TZ` in 12-hour AM/PM. Tombstoned rows (deleted from the Fetch box) appear struck-through and dimmed; filter via `ON FETCH` / `DELETED` chips; `WHEN` includes `1H` / `24H` for recent activity.
+- **Recordings**: rows update live during a sync — a download/scan/cut in flight shows a progress bar and the list polls every 2 s, falling back to 60 s once nothing is active; sizes render in the configured `TZ` in 12-hour AM/PM. Tombstoned rows (deleted from the Fetch box) appear struck-through and dimmed; filter via `ON FETCH` / `DELETED` chips; `WHEN` includes `1H` / `24H` for recent activity.
 - **Danger Zone**: `NUKE ALL STATE` button clears the DB and reloads into the wizard.
 
 ## Regenerating the README screenshots

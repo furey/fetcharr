@@ -205,6 +205,7 @@ const DEFAULT_ROUTE = 'dashboard'
 const DASHBOARD_POLL_MS = 30_000
 const SYNCS_POLL_MS = 30_000
 const RECORDINGS_POLL_MS = 60_000
+const RECORDINGS_ACTIVE_POLL_MS = 2_000
 
 const parseHash = () => {
   const h = (window.location.hash || '').replace(/^#\/?/, '').toLowerCase()
@@ -1039,10 +1040,23 @@ const RecordingsView = {
                     <span :class="['pill', r.status]">{{ r.status }}</span>
                     <span v-if="r.error" class="block text-xs font-mono text-signal-magenta-hi mt-1">{{ r.error }}</span>
                   </template>
+                  <div v-if="progressPhase(r) === 'downloading'" class="progress">
+                    <div class="progress-track">
+                      <div class="progress-fill" :style="{ width: (r.progress.percent || 0) + '%' }"></div>
+                    </div>
+                    <span class="progress-caption">{{ progressCaption(r) }}</span>
+                  </div>
                 </td>
                 <td>
                   <span v-if="r.ad_status" :class="['pill', r.ad_status]" :title="adTooltip(r)">{{ adLabel(r.ad_status) }}</span>
-                  <span v-else class="text-ink-mute">—</span>
+                  <span v-else-if="!progressPhase(r)" class="text-ink-mute">—</span>
+                  <div v-if="isAdProgress(r)" class="progress">
+                    <div v-if="hasBar(r)" class="progress-track">
+                      <div class="progress-fill" :class="{ indeterminate: r.progress.percent == null }"
+                        :style="r.progress.percent == null ? {} : { width: r.progress.percent + '%' }"></div>
+                    </div>
+                    <span class="progress-caption">{{ progressCaption(r) }}</span>
+                  </div>
                 </td>
                 <td class="font-mono whitespace-nowrap">{{ fmtTime(r.downloaded_at) }}</td>
                 <td>
@@ -1207,6 +1221,34 @@ const RecordingsView = {
 
     const adLabel = (status) => status.replace(/_/g, ' ')
 
+    const progressPhase = (r) => r.progress?.phase || null
+
+    const isAdProgress = (r) => {
+      const phase = progressPhase(r)
+      return phase === 'scanning' || phase === 'cutting' || phase === 'verifying'
+    }
+
+    const hasBar = (r) => {
+      const phase = progressPhase(r)
+      return phase === 'downloading' || phase === 'scanning'
+    }
+
+    const progressCaption = (r) => {
+      const p = r.progress
+      if (!p) return ''
+      if (p.phase === 'downloading') {
+        const bits = [`${p.percent}%`]
+        if (p.etaLabel) bits.push(p.etaLabel)
+        if (p.detail) bits.push(p.detail)
+        return bits.join(' · ')
+      }
+      if (p.phase === 'scanning') {
+        if (p.percent == null) return p.detail || 'scanning'
+        return p.etaLabel ? `${p.percent}% · ~${p.etaLabel} left` : `${p.percent}%`
+      }
+      return p.detail || p.phase
+    }
+
     const adTooltip = (r) => {
       if (!r.ad_breaks_json) return ''
       try {
@@ -1285,14 +1327,22 @@ const RecordingsView = {
     }
 
     let pollTimer = null
+    const hasActiveProgress = () => recordings.value.some((r) => r.progress)
+    const scheduleNextPoll = () => {
+      const delay = hasActiveProgress() ? RECORDINGS_ACTIVE_POLL_MS : RECORDINGS_POLL_MS
+      pollTimer = setTimeout(pollTick, delay)
+    }
+    const pollTick = async () => {
+      await refresh().catch(() => {})
+      scheduleNextPoll()
+    }
     onMounted(() => {
       loadShows()
       loadAdRemovalSetting()
-      refresh()
-      pollTimer = setInterval(refresh, RECORDINGS_POLL_MS)
+      refresh().catch(() => {}).finally(scheduleNextPoll)
     })
     onUnmounted(() => {
-      if (pollTimer) clearInterval(pollTimer)
+      if (pollTimer) clearTimeout(pollTimer)
     })
 
     watch(
@@ -1310,6 +1360,7 @@ const RecordingsView = {
       deletingId, removingId, purging, adRemovalEnabled, adScanningId,
       refresh, manualRefresh, canDelete, isRecording,
       canAdScan, adLabel, adTooltip, adScan,
+      progressPhase, isAdProgress, hasBar, progressCaption,
       deleteFromFetch, removeRecording, purgeDeleted,
       setStatus, setShow, setSince, setDeleted, toggleSort, sortMarker,
       se: seasonEpisodeLabel, fmtBytes, fmtTime,

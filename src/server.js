@@ -25,6 +25,7 @@ import {
   FetchCloudError,
 } from './fetch-cloud.js'
 import { startManualAdScan, comskipIniOverrideExists, resetInterruptedScans } from './commercials.js'
+import { snapshotProgress } from './progress.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -335,8 +336,9 @@ app.get('/api/recordings', async (req, res) => {
     .offset((page - 1) * pageSize)
 
   const [totalRow, rows] = await Promise.all([totalQuery, rowsQuery])
+  const progress = snapshotProgress(rows.map((r) => r.fetch_id))
   res.json({
-    recordings: rows,
+    recordings: rows.map((r) => ({ ...r, progress: progress[r.fetch_id] ?? null })),
     total: Number(totalRow?.count) || 0,
     page,
     pageSize,
