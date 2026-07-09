@@ -57,6 +57,13 @@ If your media stack is Fetch TV → Plex, Fetcharr is the automation in between:
   <br/><em>Syncs</em>
 </p>
 
+<p align="center">
+  <img src="docs/img/screenshot-mobile-dashboard.png" alt="Dashboard on mobile" width="32%"/>
+  <img src="docs/img/screenshot-mobile-shows.png" alt="Shows on mobile" width="32%"/>
+  <img src="docs/img/screenshot-mobile-recordings.png" alt="Recordings on mobile" width="32%"/>
+  <br/><em>Mobile</em>
+</p>
+
 ## What Fetcharr isn't
 
 - ❌ **An indexer integration** (Sonarr / Radarr / Prowlarr): Fetcharr only consumes what Fetch has already recorded; it doesn't tell Fetch *what* to record. Use the box's own EPG to schedule recordings.
@@ -81,6 +88,7 @@ If your media stack is Fetch TV → Plex, Fetcharr is the automation in between:
 - **Live operation progress**: downloads, ad scans, and cuts report inline in the Recordings tab (a download bar with byte rate and ETA, a duration-estimated scan bar that counts down, a cut segment counter); the list polls every 2 s while anything is active instead of the idle 60 s. See [`docs/DEEP_DIVE.md`](docs/DEEP_DIVE.md#live-progress-indicators).
 - **Self-housekeeping**: sync history auto-prunes to the latest 500 rows; recording rows age out 30 days after delete-from-Fetch.
 - **TZ-aware UI**: container `TZ` propagates to the browser; timestamps render in that zone regardless of which device hits the page.
+- **Phone-friendly UI**: every view adapts below tablet width — tables become cards, filters become swipeable chip rows, and touch targets meet Apple's 44 pt guideline — so checking a sync from the couch works as well as from a desk.
 - **Danger Zone**: one-click `NUKE ALL STATE` reset back to the welcome wizard. DB only; downloaded media files untouched.
 - **Authless LAN service**: SQLite-backed, single Docker container, no external runtime dependencies once configured.
 
