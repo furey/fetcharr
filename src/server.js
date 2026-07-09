@@ -24,7 +24,7 @@ import {
   deleteRecordings as deleteCloudRecordings,
   FetchCloudError,
 } from './fetch-cloud.js'
-import { startManualAdScan, comskipIniOverrideExists } from './commercials.js'
+import { startManualAdScan, comskipIniOverrideExists, resetInterruptedScans } from './commercials.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -687,6 +687,11 @@ const safeJson = (s) => {
 
 const server = app.listen(PORT, async () => {
   console.log(`fetcharr listening on http://0.0.0.0:${PORT}`)
+  try {
+    await resetInterruptedScans()
+  } catch (err) {
+    console.error('[ads] failed to reset interrupted scans:', err.message)
+  }
   try {
     await startScheduler()
   } catch (err) {
