@@ -159,7 +159,7 @@ export const deleteRecordings = async ({
   const ws = await openCloudWs({ authCookie })
 
   try {
-    const { mapByDlnaId } = await fetchLibraryViaHandshake(ws, tid)
+    const { mapByDlnaId } = await fetchLibraryWithRetry(ws, tid)
     const { cloudIds, unmappedDlnaIds } = translateToCloudIds(inputDlnaIds, mapByDlnaId)
     if (cloudIds.length === 0) {
       throw new FetchCloudError(
@@ -287,6 +287,36 @@ const sendDeleteAndAwaitAck = ({ ws, terminalId, cloudIds, inputDlnaIds, unmappe
   })
 }
 
+// The I_AM_ALIVE reply comes from the box itself via the cloud relay, not from
+// Fetch's servers — a box whose cloud session is asleep misses the first ping
+// even while it answers UPnP on the LAN. ARE_YOU_ALIVE is queueable, so attempt
+// one often wakes the session and the retry succeeds.
+const fetchLibraryWithRetry = async (ws, terminalId) => {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await fetchLibraryViaHandshake(ws, terminalId)
+    } catch (err) {
+      const timedOut = err instanceof FetchCloudError
+        && err.stage === 'handshake'
+        && err.code === 'timeout'
+      if (!timedOut) throw err
+      if (attempt >= HANDSHAKE_ATTEMPTS) {
+        throw new FetchCloudError(
+          `No I_AM_ALIVE reply after ${HANDSHAKE_ATTEMPTS} attempts`
+            + ` (${(HANDSHAKE_ATTEMPTS * ARE_YOU_ALIVE_TIMEOUT_MS) / 1000}s).`
+            + " The box's cloud session is likely asleep — retry shortly,"
+            + ' or check the box is visible in the Fetch mobile app.',
+          { stage: 'handshake', code: 'timeout' },
+        )
+      }
+      console.warn(
+        `[fetch-cloud] I_AM_ALIVE attempt ${attempt}/${HANDSHAKE_ATTEMPTS} timed out`
+          + ` after ${ARE_YOU_ALIVE_TIMEOUT_MS}ms; resending ARE_YOU_ALIVE`,
+      )
+    }
+  }
+}
+
 // Sends ARE_YOU_ALIVE and waits for I_AM_ALIVE, which carries the recording
 // library with both dlnaId (UPnP ObjectID — fetcharr's fetch_id) and cloud-side
 // `id` (what the delete API actually expects).
@@ -394,4 +424,5 @@ const STANDARD_HEADERS = {
 const WS_OPEN_TIMEOUT_MS = 8000
 const AUTH_TIMEOUT_MS = 10000
 const ARE_YOU_ALIVE_TIMEOUT_MS = 10000
+const HANDSHAKE_ATTEMPTS = 2
 const DELETE_ACK_TIMEOUT_MS = 15000
