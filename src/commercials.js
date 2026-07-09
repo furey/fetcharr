@@ -8,46 +8,49 @@ import { db, getSetting } from './db.js'
 import { setProgress, clearProgress, formatEta } from './progress.js'
 
 export const processRecordingAds = async ({ filePath, mode, fetchId }) => {
+  if (scansInFlight.has(fetchId)) return { status: 'busy', breaks: [], adSeconds: 0 }
+  scansInFlight.add(fetchId)
   const workdir = adWorkdir(filePath)
   let status = mode === 'cut' ? 'cut_failed' : 'detect_failed'
   let breaks = []
   try {
-    await db('recordings').where({ fetch_id: fetchId }).update({ ad_status: 'scanning' })
-    await fs.rm(workdir, { recursive: true, force: true })
-    await fs.mkdir(workdir, { recursive: true })
-    breaks = await detectBreaks({ filePath, workdir, fetchId })
-    if (breaks.length === 0) {
-      status = 'no_breaks'
-    } else if (mode !== 'cut') {
-      status = 'detected'
-    } else {
-      const newSize = await cutBreaks({ filePath, workdir, breaks, fetchId })
-      await db('recordings').where({ fetch_id: fetchId }).update({ size: newSize })
-      status = 'cut'
+    try {
+      await db('recordings').where({ fetch_id: fetchId }).update({ ad_status: 'scanning' })
+      await fs.rm(workdir, { recursive: true, force: true })
+      await fs.mkdir(workdir, { recursive: true })
+      breaks = await detectBreaks({ filePath, workdir, fetchId })
+      if (breaks.length === 0) {
+        status = 'no_breaks'
+      } else if (mode !== 'cut') {
+        status = 'detected'
+      } else {
+        const newSize = await cutBreaks({ filePath, workdir, breaks, fetchId })
+        await db('recordings').where({ fetch_id: fetchId }).update({ size: newSize })
+        status = 'cut'
+      }
+    } catch (err) {
+      console.error(`[ads] ${path.basename(filePath)}: ${err.message}`)
+    } finally {
+      clearProgress(fetchId)
     }
-  } catch (err) {
-    console.error(`[ads] ${path.basename(filePath)}: ${err.message}`)
+    await fs.rm(workdir, { recursive: true, force: true }).catch(() => {})
+    await fs.rmdir(path.dirname(workdir)).catch(() => {})
+    await db('recordings').where({ fetch_id: fetchId }).update({
+      ad_status: status,
+      ad_breaks_json: breaks.length ? JSON.stringify(breaks) : null,
+      ad_processed_at: db.fn.now(),
+    }).catch((err) => {
+      console.error(`[ads] ${fetchId}: failed to record result: ${err.message}`)
+    })
+    return { status, breaks, adSeconds: totalBreakSeconds(breaks) }
   } finally {
-    clearProgress(fetchId)
+    scansInFlight.delete(fetchId)
   }
-  await fs.rm(workdir, { recursive: true, force: true }).catch(() => {})
-  await fs.rmdir(path.dirname(workdir)).catch(() => {})
-  await db('recordings').where({ fetch_id: fetchId }).update({
-    ad_status: status,
-    ad_breaks_json: breaks.length ? JSON.stringify(breaks) : null,
-    ad_processed_at: db.fn.now(),
-  }).catch((err) => {
-    console.error(`[ads] ${fetchId}: failed to record result: ${err.message}`)
-  })
-  return { status, breaks, adSeconds: totalBreakSeconds(breaks) }
 }
 
 export const startManualAdScan = ({ filePath, mode, fetchId }) => {
-  if (manualScanInFlight) return false
-  manualScanInFlight = true
-  processRecordingAds({ filePath, mode, fetchId }).finally(() => {
-    manualScanInFlight = false
-  })
+  if (scansInFlight.has(fetchId)) return false
+  processRecordingAds({ filePath, mode, fetchId })
   return true
 }
 
@@ -65,6 +68,18 @@ export const pruneCutOriginals = async () => {
 
 export const resetInterruptedScans = async () =>
   db('recordings').where({ ad_status: 'scanning' }).update({ ad_status: null })
+
+export const recoverInterruptedCuts = async () => {
+  const rows = await db('recordings').whereNotNull('file_path').select('file_path')
+  for (const { file_path } of rows) {
+    const origPath = `${file_path}${ORIG_SUFFIX}`
+    if (await pathExists(file_path)) continue
+    if (!(await pathExists(origPath))) continue
+    await fs.rename(origPath, file_path).catch((err) => {
+      console.error(`[ads] failed to restore ${origPath}: ${err.message}`)
+    })
+  }
+}
 
 export const comskipIniOverrideExists = async () => {
   try {
@@ -275,6 +290,8 @@ const totalBreakSeconds = (breaks) =>
 const adWorkdir = (filePath) =>
   path.join(path.dirname(filePath), WORKDIR_NAME, path.basename(filePath))
 
+const pathExists = (target) => fs.access(target).then(() => true).catch(() => false)
+
 const execFileP = promisify(execFile)
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -296,4 +313,4 @@ const FFMPEG_TIMEOUT_MS = 30 * 60 * 1000
 const FFPROBE_TIMEOUT_MS = 60_000
 const SPAWN_MAX_BUFFER = 16 * 1024 * 1024
 
-let manualScanInFlight = false
+const scansInFlight = new Set()

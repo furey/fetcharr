@@ -63,19 +63,6 @@ const fmtTime = (s) => {
   return new Date(iso).toLocaleString('en-AU', { timeZone: tz.value, hour12: true })
 }
 
-const fmtTimeShort = (s) => {
-  if (!s) return ''
-  const iso = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(s) ? `${s.replace(' ', 'T')}Z` : s
-  return new Date(iso).toLocaleString('en-AU', {
-    timeZone: tz.value,
-    hour12: true,
-    month: 'short',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
-
 const plexSummary = (p) => {
   if (p.triggered) return `plex ✓ (${p.status})`
   if (p.skipped) return 'plex —'
@@ -1393,7 +1380,7 @@ const SettingsView = {
           <div class="panel-body grid gap-4 md:grid-cols-2">
             <div class="field-row">
               <label class="field-label">Fetch TV IP</label>
-              <input type="text" class="field-input" v-model="fetchIp" placeholder="e.g. 192.168.86.33" />
+              <input type="text" class="field-input" v-model="fetchIp" placeholder="e.g. 192.168.1.50" />
             </div>
             <div class="field-row">
               <label class="field-label">Fetch TV port</label>

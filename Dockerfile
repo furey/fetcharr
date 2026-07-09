@@ -16,15 +16,19 @@ COPY package.json package-lock.json .npmrc ./
 # (engine-strict). We inline the install steps instead of `npm run setup` to
 # skip `npm audit signatures` at build time — it re-queries the registry and
 # enforces min-release-age=3, which blocks freshly-published deps (e.g. just
-# after cutting a new fetchtv release). Run `npm run audit:signatures` (or `npm
-# run setup`) on the host after the lockfile's newest dep ages past the
-# threshold; the lockfile's integrity hashes still verify package contents
-# during `npm ci`.
+# after cutting a new fetchtv release). Run `npm audit signatures` (or `npm run
+# setup`) on the host after the lockfile's newest dep ages past the threshold;
+# the lockfile's integrity hashes still verify package contents during `npm ci`.
 RUN npm install -g npm@11.15.0 \
  && npm ci --ignore-scripts \
  && npm run rebuild:natives
 
 COPY . .
+
+# Force production mode so a bare `docker run` (without the compose env) still
+# refuses the dev CSRF secret and never serves Express development-mode stack
+# traces. Compose sets the same value; this is the safe default when it doesn't.
+ENV NODE_ENV=production
 
 # /config is bind-mounted at runtime. Create it so the container can boot even
 # if the host directory is empty on first run.
