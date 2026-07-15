@@ -33,10 +33,14 @@ features:
     details: >-
       Refuses to grab a half-recorded show, resumes interrupted downloads with
       HTTP Range, and holds a short file as partial until the next sync completes it.
+    link: /deep-dive#sync-state-machine
+    linkText: The state machine
   - title: Plex integration
     details: >-
       Refreshes the library section after any sync that downloaded something, with
       a Refresh Plex now button when you want it sooner.
+    link: /guide/plex
+    linkText: Set up Plex
   - title: Optional ad removal
     details: >-
       comskip commercial detection with a detect-only audit mode and keyframe
