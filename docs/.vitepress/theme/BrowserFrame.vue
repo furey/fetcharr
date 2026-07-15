@@ -5,7 +5,7 @@ import { ref, onMounted } from 'vue'
 const props = defineProps({
   src: { type: String, default: '/demo.mp4' },
   poster: { type: String, default: '/demo-poster.jpg' },
-  label: { type: String, default: 'fetcharr' }
+  label: { type: String, default: 'http://fetcharr.lan' }
 })
 
 const video = ref(null)
@@ -27,9 +27,11 @@ onMounted(() => {
 <template>
   <div class="browser-frame">
     <div class="browser-frame__bar" aria-hidden="true">
-      <span class="browser-frame__dot browser-frame__dot--blue"></span>
-      <span class="browser-frame__dot browser-frame__dot--magenta"></span>
-      <span class="browser-frame__dot browser-frame__dot--yellow"></span>
+      <span class="browser-frame__dots">
+        <span class="browser-frame__dot browser-frame__dot--blue"></span>
+        <span class="browser-frame__dot browser-frame__dot--magenta"></span>
+        <span class="browser-frame__dot browser-frame__dot--yellow"></span>
+      </span>
       <span class="browser-frame__url">{{ label }}</span>
     </div>
     <div class="browser-frame__screen">
@@ -51,9 +53,9 @@ onMounted(() => {
 
 <style scoped>
 .browser-frame {
+  position: relative;
+  z-index: 1;
   width: 100%;
-  max-width: 1152px;
-  margin: 4rem auto 0;
   border-radius: 12px;
   overflow: hidden;
   border: 1px solid var(--vp-c-divider);
@@ -64,12 +66,17 @@ onMounted(() => {
 }
 
 .browser-frame__bar {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 8px;
   padding: 10px 14px;
   background: var(--vp-c-bg-elv);
   border-bottom: 1px solid var(--vp-c-divider);
+}
+
+.browser-frame__dots {
+  display: flex;
+  gap: 8px;
 }
 
 .browser-frame__dot {
@@ -83,15 +90,18 @@ onMounted(() => {
 .browser-frame__dot--yellow { background: #e2b03c; }
 
 .browser-frame__url {
-  margin-left: 10px;
-  padding: 3px 12px;
-  border-radius: 6px;
-  background: var(--vp-c-bg);
-  border: 1px solid var(--vp-c-divider);
-  color: var(--vp-c-text-2);
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 60%;
+  padding: 1px 8px;
+  color: var(--vp-c-text-3);
   font-family: var(--vp-font-family-mono);
-  font-size: 12px;
+  font-size: 10.5px;
   letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .browser-frame__screen {

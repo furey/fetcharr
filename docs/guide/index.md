@@ -44,12 +44,17 @@ It adapts to a phone, too: every view collapses to cards and swipeable chip rows
 
 <style>
 .fetcharr-mobile-shots {
-  display: flex;
-  gap: 12px;
   margin-top: 1.5rem;
 }
+.fetcharr-mobile-shots p {
+  display: flex;
+  gap: 12px;
+  margin: 0;
+}
 .fetcharr-mobile-shots img {
-  width: 33%;
+  flex: 1 1 0;
+  min-width: 0;
+  width: 100%;
   border-radius: 10px;
   border: 1px solid var(--vp-c-divider);
 }

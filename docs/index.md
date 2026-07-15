@@ -56,5 +56,3 @@ features:
     link: /deep-dive#security-model
     linkText: The security model
 ---
-
-<BrowserFrame label="localhost:8124" />

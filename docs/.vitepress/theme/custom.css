@@ -118,3 +118,34 @@ kbd {
   font-size: 0.85em;
   line-height: 1.2;
 }
+
+/* Home hero: the image slot carries the browser-framed demo video, so let it
+   grow past the default VPImage box and re-centre the glow behind it. */
+.VPHero .image {
+  max-width: none;
+}
+
+.VPHero .image-container {
+  transform: none;
+  padding: 0;
+  max-width: 560px;
+}
+
+.VPHero .image-bg {
+  width: 644px;
+  height: 644px;
+  top: 58%;
+  opacity: 0.6;
+}
+
+@media (min-width: 960px) {
+  .VPHero .image-container {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 959px) {
+  .VPHero .image {
+    margin-top: 2rem;
+  }
+}
