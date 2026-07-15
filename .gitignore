@@ -1,6 +1,8 @@
 node_modules/
 config/
 tmp/
+docs/.vitepress/dist/
+docs/.vitepress/cache/
 docker-compose.yml
 *.db
 *.db-journal

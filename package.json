@@ -10,6 +10,7 @@
     "type": "git",
     "url": "git+https://github.com/furey/fetcharr.git"
   },
+  "homepage": "https://furey.github.io/fetcharr/",
   "keywords": [
     "plex",
     "fetch-tv",

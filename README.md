@@ -13,6 +13,11 @@
   <img alt="Docker" src="https://img.shields.io/badge/docker-compose-009be4.svg?style=flat-square"/>
   <img alt="Last commit" src="https://img.shields.io/github/last-commit/furey/fetcharr.svg?style=flat-square&color=e2b03c"/>
   <img alt="No auth" src="https://img.shields.io/badge/auth-LAN%20only-8b837e.svg?style=flat-square"/>
+  <a href="https://furey.github.io/fetcharr/"><img alt="Documentation" src="https://img.shields.io/badge/docs-vitepress-009be4.svg?style=flat-square"/></a>
+</p>
+
+<p align="center">
+  <a href="https://furey.github.io/fetcharr/"><strong>Read the documentation →</strong></a>
 </p>
 
 ## Contents
@@ -182,7 +187,7 @@ Fetcharr has no login; anyone who can reach the port can view state and change s
 
 ## Technical deep dive
 
-Architecture diagrams, the sync state machine, the delete-from-Fetch cloud rationale, the full environment reference, Docker deployment, the security model, local development, and more are all in [`docs/DEEP_DIVE.md`](docs/DEEP_DIVE.md).
+Architecture diagrams, the sync state machine, the delete-from-Fetch cloud rationale, the full environment reference, Docker deployment, the security model, local development, and more are all in [`docs/DEEP_DIVE.md`](docs/DEEP_DIVE.md), also browsable on the [documentation site](https://furey.github.io/fetcharr/deep-dive).
 
 ## Troubleshooting
 

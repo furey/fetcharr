@@ -1,6 +1,6 @@
 # Technical Deep Dive
 
-The technical companion to [`README.md`](../README.md): what Fetcharr is doing under the hood, and why it works the way it does.
+The technical companion to [`README.md`](https://github.com/furey/fetcharr/blob/main/README.md): what Fetcharr is doing under the hood, and why it works the way it does.
 
 ## Contents
 
@@ -238,7 +238,7 @@ The `min-release-age=3` hardening rule in `.npmrc` will refuse versions newer th
 
 ## Security model
 
-Vulnerability reporting and the accepted residual risks from the transitive-dependency advisories are documented in [SECURITY.md](../SECURITY.md). The hardening measures:
+Vulnerability reporting and the accepted residual risks from the transitive-dependency advisories are documented in [SECURITY.md](https://github.com/furey/fetcharr/blob/main/SECURITY.md). The hardening measures:
 
 - **`.npmrc`** sets:
   - `ignore-scripts=true`: never run lifecycle scripts during install. Native rebuilds are explicit via `rebuild:natives`.
