@@ -7,8 +7,8 @@ description: Fixes for the common snags — discovery, Plex, downloads, deletes,
 
 ## Auto-discover can't find the Fetch box
 
-- The container must run with host networking (the example compose already does); SSDP multicast doesn't cross Docker's bridge network.
-- The host must be on the same LAN/broadcast domain as the box; multicast doesn't cross subnets without help.
+- The container has to run with host networking (the example compose already does this). Fetcharr finds the box by listening for the announcement it broadcasts on your network (a protocol called SSDP), and those broadcasts don't reach across Docker's own private network, so the container has to share the host's network to hear them.
+- The host has to be on the same part of the network as the box; those broadcasts don't cross between subnets without extra setup.
 - You can always enter the box's IP and port manually in Settings instead.
 
 ## Plex token auto-detect fails
@@ -18,11 +18,11 @@ description: Fixes for the common snags — discovery, Plex, downloads, deletes,
 
 ## An episode was skipped with "currently recording"
 
-- That's deliberate: Fetch reports misleading sizes while a recording is live, so Fetcharr refuses to download it rather than save a truncated file. It syncs on the next run after the recording finishes.
+- That's deliberate: Fetch reports the wrong file size while a recording is still going, so Fetcharr refuses to download it rather than save an incomplete file. It syncs on the next run after the recording finishes.
 
 ## A recording shows `partial`
 
-- The downloaded bytes fell short of what Fetch reported. The next sync resumes from where it stopped (HTTP Range), so partials normally heal themselves.
+- The download came up short of the size Fetch reported. The next sync picks up from where it stopped (using HTTP range requests), so a `partial` normally sorts itself out.
 
 ## Delete-from-Fetch fails {#delete-from-fetch-fails}
 
@@ -37,14 +37,14 @@ Symptoms: "No I_AM_ALIVE reply" or "Timed out waiting for I_AM_ALIVE handshake".
 
 ## Ad detection is cutting the wrong things (or missing breaks)
 
-- Commercial detection is heuristic and never perfect. Comskip's accuracy on AU free-to-air varies noticeably by channel (logo detection, silence thresholds, break lengths all differ).
-- Run the show in `DETECT` mode first and check the reported break counts and minutes on the Recordings tab before switching to `CUT`. Scans are CPU-bound: budget ~30 minutes per 75-minute recording on NAS-class hardware.
-- Cuts snap to keyframes, so a second or two of slop either side of a break is expected.
-- To tune detection, place your own `comskip.ini` in the `/config` bind mount; it overrides the bundled AU-tuned default. Every cut keeps a `<file>.ts.orig` backup for the retention window, so a bad cut is recoverable by renaming the `.orig` back. See [Ad removal](/guide/ad-removal).
+- Ad detection is educated guessing, never perfect. Comskip's accuracy on Australian free-to-air varies a lot by channel (logo detection, silence thresholds, and break lengths all differ).
+- Run the show in `DETECT` mode first and check the break counts and minutes it reports on the Recordings tab before switching to `CUT`. Scans work the CPU hard: budget ~30 minutes per 75-minute recording on a home NAS.
+- Cuts land on the nearest keyframe, so a second or two either side of a break is normal.
+- To tune detection, place your own `comskip.ini` in the `/config` bind mount; it overrides the bundled Australian-tuned default. Every cut keeps a `<file>.ts.orig` backup for the retention window, so if a cut goes wrong you can rename the `.orig` back to recover it. See [Ad removal](/guide/ad-removal).
 
 ## Timestamps show the wrong time
 
-- Set `TZ` in your `.env` to your IANA zone; the UI renders every timestamp in the container's zone, whatever device you're browsing from.
+- Set `TZ` in your `.env` to your IANA timezone; the UI shows every timestamp in the container's zone, whatever device you're browsing from.
 
 ## Permission errors writing to `/config` or `/media/tv`
 

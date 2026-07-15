@@ -142,10 +142,27 @@ kbd {
   .VPHero .image-container {
     max-width: 100%;
   }
+
+  /* Keep the hero copy off the video frame; the default layout butts the two
+     columns together with no space between them. */
+  .VPHero .container {
+    gap: 40px;
+  }
 }
 
 @media (max-width: 959px) {
   .VPHero .image {
     margin-top: 2rem;
   }
+}
+
+/* Let the browser balance line breaks so no last line is left with a single
+   orphaned word (the CSS behind Tailwind's text-pretty). */
+.VPHero .text,
+.VPHero .tagline,
+.VPFeature .title,
+.VPFeature .details,
+.vp-doc p,
+.vp-doc li {
+  text-wrap: pretty;
 }

@@ -7,23 +7,23 @@ description: >-
 
 # Ad removal
 
-Free-to-air recordings carry their ad breaks. Fetcharr can detect them, and optionally cut them out, using comskip and ffmpeg baked into the image. It's off by default, and built assuming detection is sometimes wrong.
+Free-to-air recordings come with their ad breaks. Fetcharr can find those breaks, and optionally cut them out, using comskip (an ad-detection tool) and ffmpeg, both bundled in the image. It's off by default, and built on the assumption that detection is sometimes wrong.
 
 > [!WARNING]<br>
-> Detection accuracy on AU free-to-air varies by channel. Trial `DETECT` mode and check the reported breaks before you let it `CUT`.
+> How accurate detection is varies channel by channel on Australian free-to-air. Run `DETECT` mode first and check the breaks it reports before you let it `CUT`.
 
 ## Turn it on
 
-Two gates have to line up: a global switch in Settings → AD REMOVAL (off by default), and a per-show mode on the Shows tab.
+Two things have to be on: the master switch in Settings → AD REMOVAL (off by default), and a per-show mode on the Shows tab.
 
 ## Modes
 
-- **DETECT** records where the breaks are and stores them on the recording, without touching the file. Use it to audit comskip's accuracy on your channels.
-- **CUT** removes the breaks with a keyframe stream-copy (no re-encode; output stays `.ts`) and keeps the original as `<file>.ts.orig`.
+- **DETECT** notes where the breaks are and saves that against the recording, without touching the file. Use it to check how accurate comskip is on your channels.
+- **CUT** removes the breaks by copying the video across untouched (no re-encoding; the output stays `.ts`) and keeps the original as `<file>.ts.orig`.
 
 ## Backups and retention
 
-Every cut keeps a `.ts.orig` backup for a configurable window (`ad_original_retention_days`, default 7), pruned during housekeeping. A bad cut is recoverable by renaming the `.orig` back over it.
+Every cut keeps a `.ts.orig` backup for a window you choose (`ad_original_retention_days`, default 7), then routine cleanup removes it. If a cut goes wrong, rename the `.orig` back over it to recover the original.
 
 ## The comskip.ini
 
