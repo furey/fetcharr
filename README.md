@@ -39,14 +39,7 @@
 
 ## Demo
 
-A walkthrough of the dashboard, shows, recordings, syncs, and settings plays on the [documentation site](https://furey.github.io/fetcharr/).
-
-<!--
-  To embed the clip inline here: drag docs/public/demo.mp4 into a GitHub issue or
-  comment to mint a https://github.com/user-attachments/assets/<uuid> URL, then
-  replace this comment with that URL on its own line as a bare autolink, and GitHub
-  renders a native player. Regenerate the clip with ./scripts/capture-walkthrough.sh
--->
+<https://gist.github.com/user-attachments/assets/175eaba5-232e-4735-be60-be060a5c4ee8>
 
 ## What Fetcharr is
 
@@ -83,9 +76,9 @@ If your media stack is Fetch TV → Plex, Fetcharr is the automation in between:
 
 ## What Fetcharr isn't
 
-- ❌ **An indexer integration** (Sonarr / Radarr / Prowlarr): Fetcharr only consumes what Fetch has already recorded; it doesn't tell Fetch *what* to record. Use the box's own EPG to schedule recordings.
-- ❌ **Authenticated:** designed for trusted LAN deployments. CSRF, rate-limiting, and a strict CSP are in place, but there's no login. Don't expose it to the internet (see [Security](#security)).
-- ❌ **A remuxer / transcoder:** files land as `.ts` from the box and stay `.ts` — the optional ad-cutting is a keyframe stream-copy, not a re-encode. Add Tdarr or similar downstream if you need `.mkv`.
+- ❌ **An indexer integration** (Sonarr / Radarr / Prowlarr): Fetcharr only works with what Fetch has already recorded; it doesn't tell Fetch *what* to record. Schedule recordings from the box's own on-screen TV guide (its EPG), as usual.
+- ❌ **Authenticated:** designed for a home network you trust. CSRF protection, rate limiting, and a strict content-security policy are in place, but there's no login, so anyone who can reach it can change its settings. Don't expose it to the internet (see [Security](#security)).
+- ❌ **A converter:** files arrive from the box as `.ts` (the raw broadcast format) and stay `.ts`; Fetcharr never re-encodes them. The optional ad-cutting copies the video across untouched, so there's no quality loss and no change of format. Add Tdarr or similar afterwards if you need `.mkv`.
 - ❌ **A notifier:** no Discord / ntfy / push integration.
 
 > [!IMPORTANT]<br>
@@ -95,26 +88,26 @@ If your media stack is Fetch TV → Plex, Fetcharr is the automation in between:
 
 - **Zero-config discovery**: finds your Fetch TV box (SSDP) and Plex server (GDM) on the LAN, and auto-detects the Plex token from a bind-mounted `Preferences.xml`.
 - **First-run wizard**: walks Fetch box → storage → Plex → optional Fetch Cloud. Re-openable from Settings; previously-saved values prefill.
-- **Per-show follow**: pick a Fetch show, fuzzy-match it to an existing folder under your media root, and set a season template.
-- **Scheduled + manual sync**: cron-configurable polling, plus on-demand global or per-show Sync now.
-- **In-progress recording protection**: refuses to download a half-recorded show. Fetch reports misleading sizes during live record; Fetcharr catches the sentinels (and HEAD-probes stale DLNA metadata) so you never end up with truncated files.
-- **Resumable, truncation-aware downloads**: HTTP Range resume across syncs; if on-disk bytes fall short of what Fetch reported, the row stays `partial` and the next sync picks up the remainder.
+- **Per-show follow**: pick a Fetch show, match it by name to an existing folder under your media root (even when the names aren't identical), and set a season template.
+- **Scheduled + manual sync**: checks the box on a schedule you set (a cron expression), plus on-demand Sync now for everything or a single show.
+- **In-progress recording protection**: refuses to download a half-recorded show. Fetch reports the wrong size while a recording is live; Fetcharr spots the tell-tale values (and double-checks the stale file details the box serves over DLNA) so you never end up with incomplete files.
+- **Resumable downloads that notice short files**: picks up from where it stopped across syncs (HTTP range requests); if the download falls short of the size Fetch reported, the row stays `partial` and the next sync fetches the rest.
 - **Plex integration**: section refresh after every sync that downloaded something, plus a Refresh Plex now button.
-- **Optional delete-from-Fetch**: once Plex confirms the file, free up the box. This goes through Fetch's cloud API because the box's LAN-side delete is broken; [`docs/DEEP_DIVE.md`](docs/DEEP_DIVE.md#why-delete-from-fetch-goes-through-the-cloud-not-lan) has the full story.
-- **Optional ad removal**: comskip-based commercial detection with a detect-only audit mode, keyframe stream-copy cutting (no transcode), and `.orig` backups of every cut file. Off by default; detection accuracy on free-to-air varies by channel, so trial detect mode before trusting cuts. See [`docs/DEEP_DIVE.md`](docs/DEEP_DIVE.md#ad-removal).
-- **Live operation progress**: downloads, ad scans, and cuts report inline in the Recordings tab (a download bar with byte rate and ETA, a duration-estimated scan bar that counts down, a cut segment counter); the list polls every 2 s while anything is active instead of the idle 60 s. See [`docs/DEEP_DIVE.md`](docs/DEEP_DIVE.md#live-progress-indicators).
-- **Self-housekeeping**: sync history auto-prunes to the latest 500 rows; recording rows age out 30 days after delete-from-Fetch.
-- **TZ-aware UI**: container `TZ` propagates to the browser; timestamps render in that zone regardless of which device hits the page.
-- **Phone-friendly UI**: every view adapts below tablet width — tables become cards, filters become swipeable chip rows, and touch targets meet Apple's 44 pt guideline — so checking a sync from the couch works as well as from a desk.
+- **Optional delete-from-Fetch**: once Plex confirms the file, free up the box. This goes through Fetch's cloud because deleting straight from the box over your network doesn't work; [`docs/DEEP_DIVE.md`](docs/DEEP_DIVE.md#why-delete-from-fetch-goes-through-the-cloud-not-lan) has the full story.
+- **Optional ad removal**: ad detection with comskip, a detect-only mode for checking accuracy, cutting that copies the video across untouched (no re-encode), and a `.orig` backup of every cut file. Off by default; detection accuracy on free-to-air varies by channel, so try detect mode before trusting cuts. See [`docs/DEEP_DIVE.md`](docs/DEEP_DIVE.md#ad-removal).
+- **Live operation progress**: downloads, ad scans, and cuts show inline in the Recordings tab (a download bar with speed and time left, a scan bar that counts down from an estimate, a cut segment counter); the list refreshes every 2 s while anything's active instead of the idle 60 s. See [`docs/DEEP_DIVE.md`](docs/DEEP_DIVE.md#live-progress-indicators).
+- **Self-housekeeping**: sync history trims itself to the latest 500 rows; recording rows drop off 30 days after delete-from-Fetch.
+- **Timezone-aware UI**: the container's `TZ` carries through to the browser, so timestamps show in that zone whatever device hits the page.
+- **Phone-friendly UI**: on a narrow screen every view rearranges (tables become cards, filters become swipeable rows of buttons, and touch targets meet Apple's 44 pt guideline), so checking a sync from the couch works as well as from a desk.
 - **Danger Zone**: one-click `NUKE ALL STATE` reset back to the welcome wizard. DB only; downloaded media files untouched.
 - **Authless LAN service**: SQLite-backed, single Docker container, no external runtime dependencies once configured.
 
 ## Prerequisites
 
-- A **Fetch TV Mighty** PVR on the same LAN as the host running Fetcharr (SSDP/UPnP discovery uses multicast, so Fetcharr's host must be on the same broadcast domain as the box).
+- A **Fetch TV Mighty** (the box that records your TV, a PVR) on the same LAN as the host running Fetcharr. Fetcharr finds the box by listening for the announcement it broadcasts (SSDP), and those broadcasts don't travel between separate parts of a network, so both have to sit on the same one.
 - **Docker + Docker Compose** on that host.
-- **Plex Media Server** is optional; Fetcharr runs without it, you just won't get the post-sync library refresh.
-- A **Fetch cloud account** (activation code + PIN) is optional; it's required only if you want Fetcharr to delete recordings from the box after they sync.
+- **Plex Media Server** is optional; Fetcharr runs fine without it, you just won't get the automatic Plex library refresh after a sync.
+- A **Fetch cloud account** (activation code + PIN) is optional; you only need it if you want Fetcharr to delete recordings from the box once they've synced.
 
 ## Quick start
 
@@ -153,11 +146,11 @@ docker compose logs -f
 ```
 
 > [!IMPORTANT]<br>
-> The example compose uses `network_mode: host` because SSDP multicast (`239.255.255.250:1900`) does not traverse Docker's bridge network. Without host networking, Auto-discover can't find the Fetch box.
+> The example compose uses `network_mode: host` because the box's announcement (SSDP multicast, `239.255.255.250:1900`) doesn't cross Docker's own private bridge network. Without host networking, Auto-discover can't find the Fetch box.
 
 ### 4. Run the wizard
 
-Browse to `http://<host-ip>:8124`. The first visit opens a setup wizard that walks you through the Fetch box (with Auto-discover), storage (with a TEST PATH button), Plex, and the optional Fetch Cloud step. Everything is editable later in Settings, and the wizard can be re-opened from there at any time.
+Browse to `http://<host-ip>:8124`. The first visit opens a setup wizard that walks you through the Fetch box (with Auto-discover), storage (with a TEST PATH button), Plex, and the optional Fetch Cloud step. You can change all of it later in Settings, and reopen the wizard from there whenever you like.
 
 Mark shows to follow on the Shows tab and Fetcharr syncs them on the schedule you set.
 
@@ -168,7 +161,7 @@ git pull
 docker compose up -d --build fetcharr
 ```
 
-This rebuilds the image and recreates the container only if the image actually changed; your state database is untouched, and any pending migrations run automatically on next boot.
+This rebuilds the image and recreates the container only if the image actually changed. Your database is left alone, and any pending database updates (migrations) run automatically on the next start.
 
 ## Configuration
 
@@ -186,7 +179,7 @@ The Fetch TV box address and all integration credentials (Plex token, Fetch clou
 
 The full environment reference, including the settings fallback chain, is in [`docs/DEEP_DIVE.md`](docs/DEEP_DIVE.md#full-environment-reference).
 
-**Ad removal** is configured at runtime, not via env: enable it in Settings → AD REMOVAL (off by default), then pick a per-show mode on the Shows tab — `DETECT` records where the ad breaks are without touching the file, `CUT` removes them and keeps the original as `<file>.ts.orig` for a configurable number of days (default 7). Fetcharr ships a comskip.ini tuned for Australian free-to-air; drop your own `comskip.ini` into the `/config` bind mount to override it.
+**Ad removal** is configured at runtime, not via env: turn it on in Settings → AD REMOVAL (off by default), then pick a per-show mode on the Shows tab. `DETECT` notes where the ad breaks are without touching the file; `CUT` removes them and keeps the original as `<file>.ts.orig` for a number of days you choose (default 7). Fetcharr ships a comskip.ini tuned for Australian free-to-air; drop your own `comskip.ini` into the `/config` bind mount to override it.
 
 <p align="center">
   <img src="docs/img/screenshot-settings.png" alt="Settings" width="100%"/>
@@ -195,7 +188,7 @@ The full environment reference, including the settings fallback chain, is in [`d
 
 ## Security
 
-Fetcharr has no login; anyone who can reach the port can view state and change settings. CSRF protection, rate limiting, a strict CSP, and `noindex` headers are all in place, but the design assumes a trusted home LAN: don't port-forward or reverse-proxy it to the internet. Supply-chain hardening, the HTTP security headers, and the rationale behind each measure are covered in [`docs/DEEP_DIVE.md`](docs/DEEP_DIVE.md#security-model); vulnerability reporting and accepted residual risks are in [SECURITY.md](SECURITY.md).
+Fetcharr has no login; anyone who can reach the port can see everything and change settings. CSRF protection, rate limiting, a strict CSP, and `noindex` headers are all in place, but the design assumes a home network you trust: don't port-forward or reverse-proxy it to the internet. Supply-chain hardening, the HTTP security headers, and the reasoning behind each measure are covered in [`docs/DEEP_DIVE.md`](docs/DEEP_DIVE.md#security-model); vulnerability reporting and accepted residual risks are in [SECURITY.md](SECURITY.md).
 
 ## Technical deep dive
 
@@ -205,8 +198,8 @@ Architecture diagrams, the sync state machine, the delete-from-Fetch cloud ratio
 
 **Auto-discover can't find the Fetch box**
 
-- The container must run with host networking (the example compose already does); SSDP multicast doesn't cross Docker's bridge network.
-- The host must be on the same LAN/broadcast domain as the box; multicast doesn't cross subnets without help.
+- The container must run with host networking (the example compose already does this). Fetcharr finds the box by listening for the announcement it broadcasts on your network (a protocol called SSDP), and those broadcasts don't reach across Docker's own private network, so the container has to share the host's network to hear them.
+- The host must be on the same part of the network as the box; those broadcasts don't cross between subnets without extra setup.
 - You can always enter the box's IP and port manually in Settings instead.
 
 **Plex token auto-detect fails**
@@ -216,15 +209,15 @@ Architecture diagrams, the sync state machine, the delete-from-Fetch cloud ratio
 
 **An episode was skipped with "currently recording"**
 
-- That's deliberate: Fetch reports misleading sizes while a recording is live, so Fetcharr refuses to download it rather than save a truncated file. It syncs on the next run after the recording finishes.
+- That's deliberate: Fetch reports the wrong file size while a recording is still going, so Fetcharr refuses to download it rather than save an incomplete file. It syncs on the next run after the recording finishes.
 
 **A recording shows `partial`**
 
-- The downloaded bytes fell short of what Fetch reported. The next sync resumes from where it stopped (HTTP Range), so partials normally heal themselves.
+- The download came up short of the size Fetch reported. The next sync picks up from where it stopped (using HTTP range requests), so a `partial` normally sorts itself out.
 
 **Delete-from-Fetch fails with "No I_AM_ALIVE reply" (or "Timed out waiting for I_AM_ALIVE handshake")**
 
-- The reply comes from your Fetch box via Fetch's cloud, and a box whose cloud session has dozed off misses the ping even though it works fine on the LAN. Fetcharr pings twice (20 s) before giving up, and the first attempt usually wakes the box's session — so just retry the delete after a moment.
+- The reply comes from your Fetch box via Fetch's cloud, and a box whose cloud session has dozed off misses the ping even though it works fine on the LAN. Fetcharr pings twice (20 s) before giving up, and the first attempt usually wakes the box's session, so just retry the delete after a moment.
 - If it keeps failing, open the official Fetch mobile app: if the app can't see the box either, the box↔cloud link is down; restarting the box resets it. [`docs/DEEP_DIVE.md`](docs/DEEP_DIVE.md#why-delete-from-fetch-goes-through-the-cloud-not-lan) has the mechanics.
 
 **Other containers can't reach Fetcharr by name**
@@ -233,14 +226,14 @@ Architecture diagrams, the sync state machine, the delete-from-Fetch cloud ratio
 
 **Ad detection is cutting the wrong things (or missing breaks)**
 
-- Commercial detection is heuristic and never perfect. Comskip's accuracy on AU free-to-air varies noticeably by channel (logo detection, silence thresholds, break lengths all differ).
-- Run the show in `DETECT` mode first and check the reported break counts/minutes on the Recordings tab before switching to `CUT`. Scans are CPU-bound: budget ~30 minutes per 75-minute recording on NAS-class hardware.
-- Cuts snap to keyframes, so a second or two of slop either side of a break is expected.
-- To tune detection, place your own `comskip.ini` in the `/config` bind mount; it overrides the bundled AU-tuned default. Every cut keeps a `<file>.ts.orig` backup for the retention window, so a bad cut is recoverable by renaming the `.orig` back.
+- Ad detection is educated guessing, never perfect. Comskip's accuracy on Australian free-to-air varies noticeably by channel (logo detection, silence thresholds, and break lengths all differ).
+- Run the show in `DETECT` mode first and check the break counts and minutes it reports on the Recordings tab before switching to `CUT`. Scans work the CPU hard: budget ~30 minutes per 75-minute recording on a home NAS.
+- Cuts land on the nearest keyframe, so a second or two either side of a break is normal.
+- To tune detection, place your own `comskip.ini` in the `/config` bind mount; it overrides the bundled Australian-tuned default. Every cut keeps a `<file>.ts.orig` backup for the retention window, so if a cut goes wrong you can rename the `.orig` back to recover it.
 
 **Timestamps show the wrong time**
 
-- Set `TZ` in your `.env` to your IANA zone; the UI renders every timestamp in the container's zone, whatever device you're browsing from.
+- Set `TZ` in your `.env` to your IANA timezone; the UI shows every timestamp in the container's zone, whatever device you're browsing from.
 
 **Permission errors writing to `/config` or `/media/tv`**
 

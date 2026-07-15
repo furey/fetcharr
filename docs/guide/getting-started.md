@@ -10,10 +10,10 @@ Fetcharr runs as a single Docker container on the same LAN as your Fetch TV box.
 
 ## Prerequisites
 
-- A **Fetch TV Mighty** PVR on the same LAN as the host running Fetcharr. SSDP/UPnP discovery uses multicast, so the host must be on the same broadcast domain as the box.
+- A **Fetch TV Mighty** (the box that records your TV, a PVR) on the same network as the machine running Fetcharr. Fetcharr finds the box by listening for the announcement it broadcasts on the network (a protocol called SSDP), and those broadcasts don't travel between separate parts of a network, so both have to sit on the same one.
 - **Docker and Docker Compose** on that host.
-- **Plex Media Server** is optional; Fetcharr runs without it, you just won't get the post-sync library refresh. See [Plex](/guide/plex).
-- A **Fetch cloud account** (activation code + PIN) is optional; it's required only if you want Fetcharr to delete recordings from the box after they sync. See [Delete from Fetch](/guide/delete-from-fetch).
+- **Plex Media Server** is optional. Fetcharr runs fine without it; you just won't get the automatic Plex library refresh after a sync. See [Plex](/guide/plex).
+- A **Fetch cloud account** (activation code + PIN) is optional. You only need it if you want Fetcharr to delete recordings from the box once they've synced. See [Delete from Fetch](/guide/delete-from-fetch).
 
 ## 1. Get the code
 
@@ -50,11 +50,11 @@ docker compose logs -f
 ```
 
 > [!IMPORTANT]<br>
-> The example compose uses `network_mode: host` because SSDP multicast (`239.255.255.250:1900`) does not traverse Docker's bridge network. Without host networking, Auto-discover can't find the Fetch box.
+> The example compose uses `network_mode: host` because the box's announcement (SSDP multicast, `239.255.255.250:1900`) doesn't cross Docker's own private bridge network. Without host networking, Auto-discover can't find the Fetch box.
 
 ## 4. Run the wizard
 
-Browse to `http://<host-ip>:8124`. The first visit opens a setup wizard that walks you through the Fetch box (with Auto-discover), storage (with a TEST PATH button), Plex, and the optional Fetch Cloud step. Everything is editable later in Settings, and the wizard can be re-opened from there at any time.
+Browse to `http://<host-ip>:8124`. The first visit opens a setup wizard that walks you through the Fetch box (with Auto-discover), storage (with a TEST PATH button), Plex, and the optional Fetch Cloud step. You can change all of it later in Settings, and reopen the wizard from there whenever you like.
 
 Then mark shows to follow on the Shows tab; see [Following shows](/guide/following-shows).
 
@@ -65,7 +65,7 @@ git pull
 docker compose up -d --build fetcharr
 ```
 
-This rebuilds the image and recreates the container only if the image actually changed; your state database is untouched, and any pending migrations run automatically on next boot.
+This rebuilds the image and recreates the container only if the image actually changed. Your database is left alone, and any pending database updates (migrations) run automatically on the next start.
 
 ## Where next
 

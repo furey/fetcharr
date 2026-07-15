@@ -24,7 +24,7 @@ Set these in the `.env` alongside `docker-compose.yml`:
 
 ## Runtime settings
 
-The Fetch box IP and port, Plex URL and token, Fetch cloud activation code, media root, ad-removal switches, and the sync cron are all configured in Settings (or the first-run wizard) and stored in the state database. The Storage panel shows the effective media root and offers a TEST PATH button.
+The Fetch box IP and port, Plex URL and token, Fetch cloud activation code, media root, ad-removal switches, and the sync schedule are all set in Settings (or the first-run wizard) and stored in the database. The Storage panel shows the media root it's using and offers a TEST PATH button.
 
 ![The Settings tab](../img/screenshot-settings.png)
 

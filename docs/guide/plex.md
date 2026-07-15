@@ -11,7 +11,7 @@ Plex is optional. Without it, Fetcharr still downloads and files episodes; you j
 
 ## Point Fetcharr at Plex
 
-In Settings, set your Plex server URL and token, then Load sections and pick the TV library section. Auto-discover finds a Plex server on the LAN via GDM.
+In Settings, set your Plex server URL and token, then Load sections and pick the TV library section. Auto-discover finds a Plex server on your network the same way Plex's own apps do (a protocol called GDM).
 
 ## The token
 
