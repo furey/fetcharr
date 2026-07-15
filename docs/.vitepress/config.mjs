@@ -48,13 +48,12 @@ export default withMermaid(defineConfig({
 
     nav: [
       { text: 'Guide', link: '/guide/', activeMatch: '/guide/' },
-      { text: 'Getting started', link: '/guide/getting-started' },
-      { text: 'Deep dive', link: '/deep-dive' }
+      { text: 'Reference', link: '/reference/', activeMatch: '/(reference/|deep-dive)' }
     ],
 
     sidebar: [
       {
-        text: 'Guide',
+        text: 'Start here',
         collapsed: false,
         items: [
           { text: 'What Fetcharr is', link: '/guide/' },
@@ -62,9 +61,36 @@ export default withMermaid(defineConfig({
         ]
       },
       {
+        text: 'Using Fetcharr',
+        collapsed: false,
+        items: [
+          { text: 'Following shows', link: '/guide/following-shows' },
+          { text: 'Recordings', link: '/guide/recordings' },
+          { text: 'Syncs', link: '/guide/syncs' },
+          { text: 'Ad removal', link: '/guide/ad-removal' }
+        ]
+      },
+      {
+        text: 'Connect it up',
+        collapsed: false,
+        items: [
+          { text: 'Plex', link: '/guide/plex' },
+          { text: 'Delete from Fetch', link: '/guide/delete-from-fetch' }
+        ]
+      },
+      {
+        text: 'Help',
+        collapsed: false,
+        items: [
+          { text: 'Configuration', link: '/guide/configuration' },
+          { text: 'Troubleshooting', link: '/guide/troubleshooting' }
+        ]
+      },
+      {
         text: 'Reference',
         collapsed: false,
         items: [
+          { text: 'Overview', link: '/reference/' },
           { text: 'Technical deep dive', link: '/deep-dive' }
         ]
       }

@@ -13,8 +13,6 @@ If your media stack is Fetch TV → Plex, Fetcharr is the automation in between:
 
 ![The Fetcharr dashboard](../img/screenshot-dashboard.png)
 
-Ready to run it? Head to [Getting started](/guide/getting-started). Want the mechanics; the sync state machine, the delete-from-cloud rationale, the ad-removal pipeline? That's the [Technical deep dive](/deep-dive).
-
 ## What Fetcharr isn't
 
 - **Not an indexer integration** (Sonarr / Radarr / Prowlarr). Fetcharr only consumes what Fetch has already recorded; it doesn't tell Fetch what to record. Use the box's own EPG to schedule recordings.
@@ -25,18 +23,16 @@ Ready to run it? Head to [Getting started](/guide/getting-started). Want the mec
 > [!IMPORTANT]<br>
 > Tested against a Fetch TV Mighty 3 and Plex Media Server. Other Fetch hardware and firmware are unverified.
 
-## What you get
+## Where next
 
-- **Zero-config discovery** of the Fetch box (SSDP) and Plex server (GDM) on the LAN, plus Plex-token auto-detection from a bind-mounted `Preferences.xml`.
-- **A first-run wizard** that walks Fetch box → storage → Plex → optional Fetch Cloud, re-openable any time from Settings.
-- **Per-show follow** with fuzzy folder matching and a season-folder template.
-- **Scheduled and manual sync**: cron-configurable polling, plus on-demand global or per-show Sync now.
-- **In-progress recording protection**: Fetcharr catches Fetch's misleading live-record sizes so you never save a truncated file.
-- **Resumable, truncation-aware downloads** with HTTP Range resume across syncs.
-- **Optional delete-from-Fetch** once Plex confirms the file, freeing space on the box.
-- **Optional ad removal**: comskip detection with a detect-only audit mode and keyframe stream-copy cutting.
-- **Live operation progress** for downloads, ad scans, and cuts, inline in the Recordings tab.
-- **A phone-friendly UI**: every view adapts below tablet width, so checking a sync from the couch works as well as from a desk.
+- **[Getting started](/guide/getting-started)** — run it with Docker and walk the first-run wizard.
+- **[Following shows](/guide/following-shows)** — mark shows to follow and point them at library folders.
+- **[Recordings](/guide/recordings)** and **[Syncs](/guide/syncs)** — watch downloads happen and read the status of each one.
+- **[Ad removal](/guide/ad-removal)** — the optional comskip detect/cut pass.
+- **[Plex](/guide/plex)** and **[Delete from Fetch](/guide/delete-from-fetch)** — the two optional integrations.
+- **[Configuration](/guide/configuration)** and **[Troubleshooting](/guide/troubleshooting)** — the deploy knobs and the fixes for common snags.
+
+It adapts to a phone, too: every view collapses to cards and swipeable chip rows below tablet width.
 
 <div class="fetcharr-mobile-shots">
 
