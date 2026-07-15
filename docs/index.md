@@ -57,20 +57,4 @@ features:
     linkText: The security model
 ---
 
-<div class="fetcharr-shot">
-
-![The Fetcharr dashboard](./img/screenshot-dashboard.png)
-
-</div>
-
-<style>
-.fetcharr-shot {
-  max-width: 1152px;
-  margin: 4rem auto 0;
-  padding: 0 24px;
-}
-.fetcharr-shot img {
-  border-radius: 12px;
-  border: 1px solid var(--vp-c-divider);
-}
-</style>
+<BrowserFrame label="localhost:8124" />

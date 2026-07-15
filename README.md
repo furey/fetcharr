@@ -22,6 +22,7 @@
 
 ## Contents
 
+- [Demo](#demo)
 - [What Fetcharr is](#what-fetcharr-is)
 - [What Fetcharr isn't](#what-fetcharr-isnt)
 - [Features](#features)
@@ -35,6 +36,17 @@
 - [Contributing](#contributing)
 - [Support](#support)
 - [Licence](#licence)
+
+## Demo
+
+A walkthrough of the dashboard, shows, recordings, syncs, and settings plays on the [documentation site](https://furey.github.io/fetcharr/).
+
+<!--
+  To embed the clip inline here: drag docs/public/demo.mp4 into a GitHub issue or
+  comment to mint a https://github.com/user-attachments/assets/<uuid> URL, then
+  replace this comment with that URL on its own line as a bare autolink, and GitHub
+  renders a native player. Regenerate the clip with ./scripts/capture-walkthrough.sh
+-->
 
 ## What Fetcharr is
 

@@ -6,7 +6,7 @@ description: >-
 
 # Getting started
 
-Fetcharr runs as a single Docker container on a host that shares a LAN with your Fetch TV box.
+Fetcharr runs as a single Docker container on the same LAN as your Fetch TV box.
 
 ## Prerequisites
 
