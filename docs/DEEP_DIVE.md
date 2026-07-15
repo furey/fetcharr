@@ -1,6 +1,6 @@
 # Technical Deep Dive
 
-The technical companion to [`README.md`](../README.md): what Fetcharr is doing under the hood, and why it works the way it does.
+The technical companion to [`README.md`](https://github.com/furey/fetcharr/blob/main/README.md): what Fetcharr is doing under the hood, and why it works the way it does.
 
 ## Contents
 
@@ -19,6 +19,7 @@ The technical companion to [`README.md`](../README.md): what Fetcharr is doing u
 - [Scripts](#scripts)
 - [Testing](#testing)
 - [Regenerating the README screenshots](#regenerating-the-readme-screenshots)
+- [Documentation site](#documentation-site)
 
 ## Architecture
 
@@ -238,7 +239,7 @@ The `min-release-age=3` hardening rule in `.npmrc` will refuse versions newer th
 
 ## Security model
 
-Vulnerability reporting and the accepted residual risks from the transitive-dependency advisories are documented in [SECURITY.md](../SECURITY.md). The hardening measures:
+Vulnerability reporting and the accepted residual risks from the transitive-dependency advisories are documented in [SECURITY.md](https://github.com/furey/fetcharr/blob/main/SECURITY.md). The hardening measures:
 
 - **`.npmrc`** sets:
   - `ignore-scripts=true`: never run lifecycle scripts during install. Native rebuilds are explicit via `rebuild:natives`.
@@ -382,3 +383,22 @@ The captures themselves are configured in `scripts/capture-screenshots.mjs` (des
 
 > [!TIP]<br>
 > To shoot UI changes that haven't shipped yet, run them locally against a copy of the live database — every panel renders from SQLite and the settings row, so the shots come out identical to production. Copy the state file off the deploy host (`ssh <host> 'cat /path/to/fetcharr/state.db' > /tmp/shots.db`; `scp` fails on Synology's restricted sftp subsystem), start the server with `DB_PATH=/tmp/shots.db CSRF_SECRET=$(openssl rand -hex 32) node src/server.js`, then point the capture script at your machine's LAN IP rather than `localhost` (the Playwright container can't reach the host loopback). Two cautions: the scheduler starts with the copied `sync_cron`, so capture outside the cron window or a real sync will fire against the live Fetch box, and delete the copy afterwards — it holds the Plex token and Fetch cloud PIN.
+
+## Documentation site
+
+The published docs at [furey.github.io/fetcharr](https://furey.github.io/fetcharr/) are a VitePress site under `docs/`, deployed to GitHub Pages by `.github/workflows/docs.yml` on every push to `main` that touches `docs/**` (pull requests build but don't deploy). It's decoupled from the app: `docs/` has its own `package.json` and lockfile, so `cd docs && npm install && npm run dev` previews it and `npm run build` compiles to `docs/.vitepress/dist`. The `base` is `/fetcharr/`; this file is surfaced on the site at `/deep-dive` via a `rewrites` entry, and the `docs/guide/` pages are the user-facing companion to this reference.
+
+One VitePress quirk worth knowing: the `> [!NOTE]` alert convention in these files carries a trailing `<br>` (for the VS Code preview), which VitePress would otherwise render as a blank alert title, so `docs/.vitepress/config.mjs` strips it in a markdown hook.
+
+### Recording the walkthrough video
+
+The demo clip on the docs home page and in the README is generated, not hand-recorded, by the same Playwright-in-Docker approach as the screenshots. `scripts/capture-walkthrough.sh` drives a scripted cursor tour of the tabs, then ffmpeg on the host encodes it:
+
+```sh
+# fetcharr must be up + reachable at $FETCHARR_URL (default http://localhost:8124)
+./scripts/capture-walkthrough.sh
+```
+
+The difference from the screenshots is the data. `scripts/capture-walkthrough.mjs` stubs every `/api` GET (`settings`, `shows`, `recordings`, `syncs`, `sync-status`) with synthetic fixtures via Playwright's `context.route`, so the tour shows a realistic, fully-populated UI (a live download bar, cut/detected/no-breaks pills, a partial, a tombstone) without touching any real data; any instance works, including an empty first boot. It records a 1280×800 `.webm` with an injected cursor and click ripples, opening and closing on the dashboard so the loop is seamless. ffmpeg trims the head (the driver prints `TOUR_TRIM`) and encodes H.264 (`-crf 28 -preset slow -pix_fmt yuv420p +faststart`, no audio) to `docs/public/demo.mp4` with a single-frame `demo-poster.jpg`.
+
+The docs home embeds it in a browser-framed `<video autoplay loop muted playsinline>` (`docs/.vitepress/theme/BrowserFrame.vue`). The README embed is separate: GitHub renders a native player for a bare autolink to a `user-attachments` URL, so upload `docs/public/demo.mp4` to a GitHub issue or comment to mint that URL, then paste it into the README's Demo section.
