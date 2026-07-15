@@ -10,15 +10,15 @@ Once Plex confirms an episode, the copy on the Fetch box is dead weight. Fetchar
 
 ## Why the cloud
 
-The box's LAN-side delete is broken: the firmware advertises the action but rejects the request. So deletion goes through Fetch's cloud API with your account credentials. The full rationale is in the [deep dive](/deep-dive#why-delete-from-fetch-goes-through-the-cloud-not-lan).
+Deleting straight from the box over your network doesn't work: the box offers the action but then refuses the request. So Fetcharr deletes through Fetch's cloud instead, signed in with your account. The full reasoning is in the [deep dive](/deep-dive#why-delete-from-fetch-goes-through-the-cloud-not-lan).
 
 ## Set it up
 
-In Settings → Fetch Cloud (or the wizard's Fetch Cloud step), enter your activation code and PIN, run TEST CONNECTION, then pick your box as the Terminal ID. These are your Fetch account credentials, stored in the state database.
+In Settings → Fetch Cloud (or the wizard's Fetch Cloud step), enter your activation code and PIN, run TEST CONNECTION, then pick your box as the Terminal ID. These are your Fetch account details, stored in Fetcharr's database.
 
 ## When it deletes
 
-A delete is queued only after Plex confirms the downloaded file. For a `CUT`-mode show it also waits for the cut to verify, so the box keeps the pristine source if a cut fails ([Ad removal](/guide/ad-removal)). Deleted recordings show as tombstones in [Recordings](/guide/recordings).
+A delete is queued only after Plex confirms the downloaded file. For a `CUT`-mode show it also waits for the cut to check out, so the box keeps the untouched original if a cut fails ([Ad removal](/guide/ad-removal)). Deleted recordings show as tombstones in [Recordings](/guide/recordings).
 
 ## If a delete fails
 

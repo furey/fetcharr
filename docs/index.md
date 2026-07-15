@@ -5,7 +5,7 @@ hero:
   name: fetcharr
   text: Fetch TV recordings, in Plex.
   tagline: >-
-    A self-hosted bridge for Australian Fetch TV DVB-T boxes. It watches the box
+    A self-hosted bridge for Australian Fetch TV DVB‑T boxes. It watches the box
     on your LAN, downloads new episodes of the shows you follow, files them into
     your Plex TV library, and pokes Plex to scan.
   image:

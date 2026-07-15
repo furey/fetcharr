@@ -15,9 +15,9 @@ If your media stack is Fetch TV → Plex, Fetcharr is the automation in between:
 
 ## What Fetcharr isn't
 
-- **Not an indexer integration** (Sonarr / Radarr / Prowlarr). Fetcharr only consumes what Fetch has already recorded; it doesn't tell Fetch what to record. Use the box's own EPG to schedule recordings.
-- **Not authenticated.** It's designed for trusted LAN deployments. CSRF, rate-limiting, and a strict CSP are in place, but there's no login. Don't expose it to the internet; see the [security model](/deep-dive#security-model).
-- **Not a remuxer or transcoder.** Files land as `.ts` from the box and stay `.ts`. The optional ad-cutting is a keyframe stream-copy, not a re-encode. Add Tdarr or similar downstream if you need `.mkv`.
+- **Not an indexer integration** (Sonarr / Radarr / Prowlarr). Fetcharr only works with what Fetch has already recorded; it doesn't tell Fetch what to record. Schedule recordings from the box's own on-screen TV guide (its EPG), as usual.
+- **Not authenticated.** There's no login, so it's built for a home network you trust. The usual web hardening is in place (CSRF protection, rate limiting, a strict content-security policy), but anyone who can reach the page can change its settings, so don't expose it to the internet. See the [security model](/deep-dive#security-model).
+- **Not a converter.** Files arrive from the box as `.ts` (the raw broadcast format) and stay `.ts`; Fetcharr never re-encodes them. The optional ad-cutting copies the video across untouched and just drops the ad sections, so there's no quality loss and no change of format. If you want `.mkv`, run the files through Tdarr or similar afterwards.
 - **Not a notifier.** No Discord / ntfy / push integration.
 
 > [!IMPORTANT]<br>
@@ -32,7 +32,7 @@ If your media stack is Fetch TV → Plex, Fetcharr is the automation in between:
 - **[Plex](/guide/plex)** and **[Delete from Fetch](/guide/delete-from-fetch)** — the two optional integrations.
 - **[Configuration](/guide/configuration)** and **[Troubleshooting](/guide/troubleshooting)** — the deploy knobs and the fixes for common snags.
 
-It adapts to a phone, too: every view collapses to cards and swipeable chip rows below tablet width.
+It works on a phone, too: on a narrow screen every view rearranges into cards and swipeable rows of buttons.
 
 <div class="fetcharr-mobile-shots">
 

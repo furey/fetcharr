@@ -13,12 +13,12 @@ A sync is one pass over the Fetch box: browse its listings, match them against y
 
 ## Scheduled and manual
 
-Set a cron expression in Settings and the scheduler polls the box on that schedule; changing the cron reloads the scheduler without a restart. You can also Sync now globally (every enabled show) or per-show from the [Shows tab](/guide/following-shows).
+Set a schedule in Settings as a cron expression (the `* * * * *` timing string) and Fetcharr checks the box on that schedule; changing it takes effect without a restart. You can also Sync now for every enabled show at once, or for a single show from the [Shows tab](/guide/following-shows).
 
 ## Reading a sync
 
-Each row shows what the pass did: downloads, failures, deletes, or nothing (empty). A sync is marked `ok` unless something failed. A truncation (a `partial` recording) is counted as a failure rather than a skip, so it's visible at a glance instead of hiding in the noise.
+Each row shows what the pass did: downloads, failures, deletes, or nothing (empty). A sync is marked `ok` unless something failed. An incomplete download (a `partial` recording) counts as a failure rather than a skip, so it stands out at a glance instead of hiding in the noise.
 
 ## History
 
-Sync history auto-prunes to the latest 500 rows. Clear individual rows or the whole history from the tab, and filter by activity: `DOWNLOADS` / `FAILS` / `DELETES` / `EMPTY`.
+Sync history trims itself to the latest 500 rows. Clear individual rows or the whole history from the tab, and filter by activity: `DOWNLOADS` / `FAILS` / `DELETES` / `EMPTY`.
