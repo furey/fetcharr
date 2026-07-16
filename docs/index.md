@@ -3,11 +3,14 @@ layout: home
 
 hero:
   name: fetcharr
-  text: Fetch TV recordings, in Plex.
+  text: >-
+    Fetch TV recordings in&nbsp;Plex, ad&nbsp;free.<span style="font-size:0.8em;position:relative;line-height:0;top:-0.2em;left:-0.2em;">*</span>
   tagline: >-
     A self-hosted bridge for Australian Fetch TV DVB‑T boxes. It watches the box
-    on your LAN, downloads new episodes of the shows you follow, files them into
-    your Plex TV library, and pokes Plex to scan.
+    on your LAN, downloads new episodes of the shows you follow, optionally
+    removes ads, transfers them into your Plex TV library, and pokes Plex to
+    scan.<br><span style="font-size:0.575em;color:var(--vp-c-text-3)">*optional
+    via <code>comskip</code></span>
   image:
     src: /logo.svg
     alt: fetcharr
@@ -43,8 +46,9 @@ features:
     linkText: Set up Plex
   - title: Optional ad removal
     details: >-
-      comskip commercial detection with a detect-only audit mode and keyframe
-      stream-copy cutting (no transcode), keeping an .orig backup of every cut.
+      <code>comskip</code> commercial detection with a detect-only audit mode and
+      keyframe stream-copy cutting (no transcode), keeping an .orig backup of
+      every cut.
     link: /deep-dive#ad-removal
     linkText: How it works
   - title: Live operation progress
