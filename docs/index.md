@@ -29,8 +29,8 @@ features:
   - title: TV Guide
     details: >-
       A 7-day programme guide in the browser: schedule, cancel, and
-      series-record on the box, with pinned favourite channels — no Fetch
-      mobile app needed.
+      series-record on the box, with pinned favourite channels (no Fetch
+      mobile app needed).
     link: /guide/tv-guide
     linkText: Browse and record
   - title: Per-show follow

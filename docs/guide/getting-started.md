@@ -10,7 +10,7 @@ Fetcharr runs as a single Docker container on the same LAN as your Fetch TV box.
 
 ## Prerequisites
 
-- A **Fetch TV Mighty** (the box that records your TV, a PVR) on the same network as the machine running Fetcharr. Fetcharr finds the box by listening for the announcement it broadcasts on the network (a protocol called SSDP), and those broadcasts don't travel between separate parts of a network, so both have to sit on the same one.
+- A **Fetch TV Mighty** (the box that records your TV, a PVR) on the same network as the machine running Fetcharr. Fetcharr finds the box by listening for the announcement it broadcasts on the network (a protocol called SSDP). Those broadcasts don't travel between separate parts of a network, so both have to sit on the same one.
 - **Docker and Docker Compose** on that host.
 - **Plex Media Server** is optional. Fetcharr runs fine without it; you just won't get the automatic Plex library refresh after a sync. See [Plex](/guide/plex).
 - A **Fetch cloud account** (activation code + PIN) is optional. You only need it if you want Fetcharr to delete recordings from the box once they've synced. See [Delete from Fetch](/guide/delete-from-fetch).

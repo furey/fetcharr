@@ -7,7 +7,7 @@ description: >-
 
 # What Fetcharr is
 
-Your Fetch TV box records the shows you tell it to, then the recordings sit on the box, watchable only through Fetch's own interface. Fetcharr watches the box on your LAN, downloads new episodes of shows you mark to follow, drops the files into your Plex TV library, pokes Plex to scan, and optionally deletes the recording from the Fetch box once Plex confirms the file.
+Your Fetch TV box records the shows you tell it to, then the recordings sit on the box, watchable only through Fetch's own interface. Fetcharr watches the box on your LAN, downloads new episodes of shows you mark to follow, drops the files into your Plex TV library, and pokes Plex to scan. Once Plex confirms the file, it can optionally delete the recording from the Fetch box.
 
 If your media stack is Fetch TV → Plex, Fetcharr is the automation in between: schedule recordings on the box as usual, and they turn up in Plex named and foldered.
 

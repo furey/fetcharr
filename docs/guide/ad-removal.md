@@ -10,11 +10,11 @@ description: >-
 Free-to-air recordings come with their ad breaks. Fetcharr can find those breaks, and optionally cut them out, using comskip (an ad-detection tool) and ffmpeg, both bundled in the image. It's off by default, and built on the assumption that detection is sometimes wrong.
 
 > [!WARNING]<br>
-> How accurate detection is varies channel by channel on Australian free-to-air. Run `DETECT` mode first and check the breaks it reports before you let it `CUT`.
+> Detection accuracy varies channel by channel on Australian free-to-air. Run `DETECT` mode first and check the breaks it reports before you let it `CUT`.
 
 ## Turn it on
 
-Two things have to be on: the master switch in Settings → AD REMOVAL (off by default), and a per-show mode on the Shows tab.
+Turn on the master switch in Settings → AD REMOVAL (off by default), then pick a per-show mode on the Shows tab; both have to be on.
 
 ## Modes
 
