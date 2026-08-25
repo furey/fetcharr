@@ -81,7 +81,7 @@ If your media stack is Fetch TV → Plex, Fetcharr is the automation in between:
 
 ## What Fetcharr isn't
 
-- ❌ **An indexer integration** (Sonarr / Radarr / Prowlarr): Fetcharr works with the recordings on your Fetch box — it downloads what the box has recorded, and its TV Guide schedules what the box records next. It doesn't search the internet for content.
+- ❌ **An indexer integration** (Sonarr / Radarr / Prowlarr): Fetcharr works with the recordings on your Fetch box; it downloads what the box has recorded, and its TV Guide schedules what the box records next. It doesn't search the internet for content.
 - ❌ **Authenticated:** designed for a home network you trust. CSRF protection, rate limiting, and a strict content-security policy are in place, but there's no login, so anyone who can reach it can change its settings. Don't expose it to the internet (see [Security](#security)).
 - ❌ **A converter:** files arrive from the box as `.ts` (the raw broadcast format) and stay `.ts`; Fetcharr never re-encodes them. The optional ad-cutting copies the video across untouched, so there's no quality loss and no change of format. Add Tdarr or similar afterwards if you need `.mkv`.
 - ❌ **A notifier:** no Discord / ntfy / push integration.
@@ -91,7 +91,7 @@ If your media stack is Fetch TV → Plex, Fetcharr is the automation in between:
 
 ## Features
 
-- **TV Guide**: a 7-day programme guide in the browser — schedule, cancel, and series-record on the box (with padding and episodes-to-keep options), search the week, pin and reorder favourite channels, and see what's on now from the dashboard. Uses your Fetch cloud login; no Fetch mobile app needed.
+- **TV Guide**: a 7-day programme guide in the browser; schedule, cancel, and series-record on the box (with padding and episodes-to-keep options), search the week, pin and reorder favourite channels, and see what's on now from the dashboard. Uses your Fetch cloud login; no Fetch mobile app needed.
 - **Zero-config discovery**: finds your Fetch TV box (SSDP) and Plex server (GDM) on the LAN, and auto-detects the Plex token from a bind-mounted `Preferences.xml`.
 - **First-run wizard**: walks Fetch box → storage → Plex → optional Fetch Cloud. Re-openable from Settings; previously-saved values prefill.
 - **Per-show follow**: pick a Fetch show, match it by name to an existing folder under your media root (even when the names aren't identical), and set a season template.
@@ -138,7 +138,7 @@ PGID=1000
 FETCHARR_PORT=8124
 
 # Optional: only if Plex runs on this host and you want the Auto-detect token
-# button. Leave it out entirely if not — the mount defaults to a no-op.
+# button. Leave it out entirely if not (the mount defaults to a no-op).
 # PLEX_PREFS_PATH=/path/to/Plex/Preferences.xml
 ```
 
