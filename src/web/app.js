@@ -2735,13 +2735,12 @@ const EpgView = {
                 @click="setMode(m.key)">{{ m.label }}</button>
             </div>
             <div class="flex-1 min-w-[12rem] md:max-w-xs">
-              <input v-model="searchQ" type="search" class="field-input" placeholder="Search the next 7 days…"
+              <input v-model="searchQ" type="search" class="field-input" :placeholder="searchPlaceholder"
                 style="padding-top: 0.35rem; padding-bottom: 0.35rem;" />
             </div>
-            <button type="button" class="btn btn-sm" @click="openChannelsModal" :disabled="!guide">CHANNELS</button>
           </div>
 
-          <template v-if="searchActive">
+          <template v-if="mode === 'guide' && searchActive">
             <p class="text-xs font-mono text-ink-mute">
               {{ searching ? 'Searching…' : searchResults.length + ' result' + (searchResults.length === 1 ? '' : 's') + ' for “' + searchQ.trim() + '”' }}
             </p>
@@ -2786,6 +2785,7 @@ const EpgView = {
                   <button type="button" class="btn btn-sm" @click="jumpTonight">TONIGHT</button>
                 </div>
               </div>
+              <button type="button" class="btn btn-sm md:ml-auto" @click="openChannelsModal" :disabled="!guide">CHANNELS</button>
             </div>
             <p v-if="stateLine" class="text-xs font-mono text-ink-mute">{{ stateLine }}</p>
             <p v-if="guide?.stale" class="text-xs font-mono text-plex-yellow">
@@ -2902,8 +2902,9 @@ const EpgView = {
             <div v-else-if="!state" class="text-ink-dim font-mono text-sm">▰▰ contacting box…</div>
             <template v-else>
               <p v-if="upcoming.length === 0" class="text-ink-dim text-sm">Nothing scheduled on the box.</p>
+              <p v-else-if="upcomingFiltered.length === 0" class="text-ink-dim text-sm">No upcoming recordings match “{{ searchQ.trim() }}”.</p>
               <div v-else class="space-y-3">
-                <article v-for="r in upcoming" :key="r.programId + '-' + r.source"
+                <article v-for="r in upcomingFiltered" :key="r.programId + '-' + r.source"
                   class="deck-card deck-card-clickable space-y-1.5" role="button" tabindex="0"
                   @click="openUpcoming(r)"
                   @keydown.enter.prevent="openUpcoming(r)"
@@ -2937,8 +2938,9 @@ const EpgView = {
             <div v-else-if="!state" class="text-ink-dim font-mono text-sm">▰▰ contacting box…</div>
             <template v-else>
               <p v-if="seriesTags.length === 0" class="text-ink-dim text-sm">No series recordings set on the box.</p>
+              <p v-else-if="seriesTagsFiltered.length === 0" class="text-ink-dim text-sm">No series match “{{ searchQ.trim() }}”.</p>
               <div v-else class="space-y-3">
-                <article v-for="t in seriesTags" :key="seriesKey(t)" class="deck-card space-y-1.5">
+                <article v-for="t in seriesTagsFiltered" :key="seriesKey(t)" class="deck-card space-y-1.5">
                   <div class="flex items-start justify-between gap-3">
                     <span class="deck-card-title">{{ t.name || t.title || seriesKey(t) }}</span>
                     <span class="pill done">SERIES</span>
@@ -3282,6 +3284,28 @@ const EpgView = {
 
     const searchActive = computed(() => searchQ.value.trim().length >= 2)
 
+    const searchPlaceholder = computed(() => {
+      if (mode.value === 'upcoming') return 'Filter upcoming…'
+      if (mode.value === 'series') return 'Filter series…'
+      return 'Search the next 7 days…'
+    })
+
+    const listFilter = computed(() => searchQ.value.trim().toLowerCase())
+
+    const upcomingFiltered = computed(() => {
+      const q = listFilter.value
+      if (!q) return upcoming.value
+      return upcoming.value.filter((r) =>
+        `${r.name || ''} ${r.episodeTitle || ''} ${channelName(r.channelId) || ''}`.toLowerCase().includes(q))
+    })
+
+    const seriesTagsFiltered = computed(() => {
+      const q = listFilter.value
+      if (!q) return seriesTags.value
+      return seriesTags.value.filter((t) =>
+        `${t.name || t.title || ''} ${channelName(t.channelId) || ''}`.toLowerCase().includes(q))
+    })
+
     const canRecord = computed(() =>
       selected.value && selected.value.program.end > nowMs.value
       && (selected.value.channel?.recordable !== false))
@@ -3402,6 +3426,7 @@ const EpgView = {
     }
 
     const setMode = async (m) => {
+      if (m !== mode.value) searchQ.value = ''
       mode.value = m
       if (m !== 'guide') {
         loadState()
@@ -3822,7 +3847,7 @@ const EpgView = {
     let searchTimer = null
     watch(searchQ, () => {
       if (searchTimer) clearTimeout(searchTimer)
-      if (!searchActive.value) { searchResults.value = []; return }
+      if (mode.value !== 'guide' || !searchActive.value) { searchResults.value = []; return }
       searching.value = true
       searchTimer = setTimeout(async () => {
         try {
@@ -3863,7 +3888,7 @@ const EpgView = {
       visibleChannels, railNum, railFilter, pinnedCount, pinsOffscreen, scrollRailTop,
       cellState, cellStyle, cellWidth, cellTitle, isSeriesScheduled, isSeriesRec,
       jumpNow, jumpTonight, manualRefresh,
-      searchQ, searchActive, searchResults, searching,
+      searchQ, searchActive, searchResults, searching, searchPlaceholder, upcomingFiltered, seriesTagsFiltered,
       selected, openProgram, openUpcoming, closeModal, modalBusy, modalAction, canRecord, modalChannel,
       leadTime, lagTime, episodesToKeep,
       leadOptions: EPG_LEAD_OPTIONS, lagOptions: EPG_LAG_OPTIONS, keepOptions: EPG_KEEP_OPTIONS,
