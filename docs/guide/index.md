@@ -15,7 +15,7 @@ If your media stack is Fetch TV → Plex, Fetcharr is the automation in between:
 
 ## What Fetcharr isn't
 
-- **Not an indexer integration** (Sonarr / Radarr / Prowlarr). Fetcharr only works with what Fetch has already recorded; it doesn't tell Fetch what to record. Schedule recordings from the box's own on-screen TV guide (its EPG), as usual.
+- **Not an indexer integration** (Sonarr / Radarr / Prowlarr). Fetcharr works with the recordings on your Fetch box: it downloads what the box has recorded, and its [TV Guide](/guide/tv-guide) schedules what the box records next. It doesn't search the internet for content.
 - **Not authenticated.** There's no login, so it's built for a home network you trust. The usual web hardening is in place (CSRF protection, rate limiting, a strict content-security policy), but anyone who can reach the page can change its settings, so don't expose it to the internet. See the [security model](/deep-dive#security-model).
 - **Not a converter.** Files arrive from the box as `.ts` (the raw broadcast format) and stay `.ts`; Fetcharr never re-encodes them. The optional ad-cutting copies the video across untouched and just drops the ad sections, so there's no quality loss and no change of format. If you want `.mkv`, run the files through Tdarr or similar afterwards.
 - **Not a notifier.** No Discord / ntfy / push integration.
@@ -26,6 +26,7 @@ If your media stack is Fetch TV → Plex, Fetcharr is the automation in between:
 ## Where next
 
 - **[Getting started](/guide/getting-started)** — run it with Docker and walk the first-run wizard.
+- **[TV Guide](/guide/tv-guide)** — browse 7 days of programmes and schedule recordings on the box from the browser.
 - **[Following shows](/guide/following-shows)** — mark shows to follow and point them at library folders.
 - **[Recordings](/guide/recordings)** and **[Syncs](/guide/syncs)** — watch downloads happen and read the status of each one.
 - **[Ad removal](/guide/ad-removal)** — the optional comskip detect/cut pass.
@@ -37,7 +38,7 @@ It works on a phone, too: on a narrow screen every view rearranges into cards an
 <div class="fetcharr-mobile-shots">
 
 ![Dashboard on a phone](../img/screenshot-mobile-dashboard.png)
-![Shows on a phone](../img/screenshot-mobile-shows.png)
+![The TV Guide on a phone](../img/screenshot-mobile-guide.png)
 ![Recordings on a phone](../img/screenshot-mobile-recordings.png)
 
 </div>

@@ -451,12 +451,14 @@ const DashboardView = {
             Pin channels in the <a href="#/guide">TV Guide</a> (★ in the channel rail) to see what's on now.
           </p>
           <div v-if="guideUpcoming.length">
-            <div class="text-xs font-mono uppercase tracking-[0.16em] text-ink-dim mb-2">Next recordings</div>
-            <p v-for="r in guideUpcoming" :key="r.id" class="font-mono text-xs text-ink-dim truncate">
-              <span class="led-dot sm" style="background:#009be4"></span>
-              <span class="text-ink">{{ r.name }}</span>
-              · {{ fmtClockTz(tsOfMs(r.startDate)) }}<template v-if="r.episodeTitle"> · {{ r.episodeTitle }}</template>
-            </p>
+            <div class="text-xs font-mono uppercase tracking-[0.16em] text-ink-dim mb-3">Next recordings</div>
+            <div class="space-y-2">
+              <p v-for="r in guideUpcoming" :key="r.id" class="flex items-center gap-2.5 font-mono text-xs text-ink-dim min-w-0">
+                <span class="led-dot sm shrink-0" style="background:#009be4"></span>
+                <span class="truncate min-w-0"><span class="text-ink">{{ r.name }}</span>
+                · {{ fmtClockTz(tsOfMs(r.startDate)) }}<template v-if="r.episodeTitle"> · {{ r.episodeTitle }}</template></span>
+              </p>
+            </div>
           </div>
         </div>
       </section>
@@ -1647,11 +1649,13 @@ const SettingsView = {
         <section class="panel">
           <header class="panel-header">
             <span class="panel-title">FETCH CLOUD ACCOUNT</span>
-            <span class="text-xs font-mono text-ink-dim">required for delete-from-Fetch</span>
+            <span class="text-xs font-mono text-ink-dim">powers the TV Guide + delete-from-Fetch</span>
           </header>
           <div class="panel-body space-y-4">
             <p class="text-sm text-ink-dim leading-relaxed">
-              Fetch firmware blocks LAN deletion. To delete recordings after they sync, Fetcharr signs into Fetch's cloud over the same WebSocket the Fetch mobile app uses. Sign in at
+              Two features sign into Fetch's cloud the way the Fetch mobile app does: the
+              <a href="#/guide">TV Guide</a> (browse 7 days of programmes and schedule recordings from here) and
+              delete-from-Fetch after a sync (Fetch firmware blocks LAN deletion). Sign in at
               <a href="https://www.fetchtv.com.au/manage/account/summary" target="_blank" rel="noopener noreferrer">fetchtv.com.au/manage/account/summary</a>
               — under <em>Your Service → Boxes</em> each box is listed as <em>STB 1</em>, <em>STB 2</em>, etc., and the value next to it (e.g. <code>nqp…</code>) is the activation code. The PIN is the account PIN you set when you first activated Fetch.
             </p>
@@ -2300,7 +2304,7 @@ const WelcomeView = {
 
           <div v-if="step === 5" class="space-y-4">
             <p class="text-ink text-sm leading-relaxed">
-              <strong>Optional.</strong> Sign in to Fetch's cloud so Fetcharr can delete recordings from the box after they sync. Skip if you don't want auto-delete.
+              <strong>Optional, but worth it.</strong> Signing in to Fetch's cloud unlocks the <strong>TV Guide</strong> — browse 7 days of programmes and schedule recordings from your browser — and lets Fetcharr delete recordings from the box after they sync.
             </p>
             <p class="text-ink-dim text-xs leading-relaxed">
               Get your activation code from
@@ -2757,25 +2761,31 @@ const EpgView = {
               </div>
             </div>
             <p v-if="stateLine" class="text-xs font-mono text-ink-mute">{{ stateLine }}</p>
-            <div v-if="needsSetup" class="max-w-2xl space-y-4">
-              <p class="text-sm text-ink">
-                The TV Guide is not connected yet. It uses your Fetch cloud login — the same login
-                the official Fetch mobile app uses — to show 7 days of programmes and schedule
-                recordings on your box.
+            <div v-if="needsSetup" class="space-y-5">
+              <div class="relative rounded overflow-hidden border border-hairline max-w-3xl">
+                <img src="/img/guide-preview.jpg" alt="A preview of the TV Guide grid"
+                  class="block w-full opacity-80" />
+                <div class="absolute inset-0 bg-gradient-to-t from-surface-deep via-transparent to-transparent"></div>
+                <p class="absolute bottom-3 left-4 right-4 text-sm font-mono text-ink tracking-[0.06em]">
+                  7 days of programmes · record from the browser · pinned favourite channels
+                </p>
+              </div>
+              <p class="text-sm text-ink max-w-2xl">
+                This is the TV Guide — browse the week, schedule and cancel recordings, and manage
+                series, no Fetch mobile app needed. It just needs your Fetch cloud login (the same
+                login the official app uses).
               </p>
-              <ol class="list-decimal pl-5 space-y-2 text-sm text-ink-dim">
+              <ol class="list-decimal pl-5 space-y-2 text-sm text-ink-dim max-w-2xl">
                 <li>
-                  On your TV, open <code>Menu → Manage → Settings → Device Info</code> and note the
-                  <strong class="text-ink">Activation Code</strong> (also called your Fetch ID).
-                  Can't find it? Sign in at <code>fetchtv.com.au</code> and look for
-                  “Where's my code”.
+                  Sign in at
+                  <a href="https://www.fetchtv.com.au/manage/account/summary" target="_blank" rel="noopener noreferrer">fetchtv.com.au/manage/account/summary</a>
+                  — under <em>Your Service → Boxes</em>, the value next to your box is the
+                  <strong class="text-ink">activation code</strong>. The
+                  <strong class="text-ink">PIN</strong> is the account PIN you set when you first
+                  activated Fetch.
                 </li>
                 <li>
-                  Your <strong class="text-ink">PIN</strong> is the 4-digit PIN used on the box
-                  (set when Fetch was installed).
-                </li>
-                <li>
-                  Enter both under <a href="#/settings">Settings</a> → Fetch Cloud, press
+                  Enter both under <a href="#/settings">Settings</a> → Fetch Cloud Account, press
                   <code>TEST CONNECTION</code>, then come back here.
                 </li>
               </ol>
@@ -2802,8 +2812,11 @@ const EpgView = {
                   </div>
                 </div>
                 <div v-for="(ch, i) in visibleChannels" :key="ch.id"
-                  :class="['epg-row', { 'epg-pin-divider': isFirstUnpinned(i) }]">
+                  :class="['epg-row', { 'epg-pin-divider': isFirstUnpinned(i), pinned: ch.pinned, 'epg-drop-target': dropTargetId === String(ch.id) }]"
+                  @dragover="onPinDragOver(ch, $event)" @drop="onPinDrop(ch, $event)" @dragleave="onPinDragLeave(ch)">
                   <div class="epg-rail-cell" :style="{ width: railPx + 'px' }">
+                    <span v-if="ch.pinned" class="epg-drag" draggable="true" title="Drag to reorder pinned channels"
+                      @dragstart="onPinDragStart(ch, $event)" @dragend="onPinDragEnd">⠿</span>
                     <button type="button" :class="['epg-pin', { pinned: ch.pinned }]"
                       :title="ch.pinned ? 'Unpin channel' : 'Pin channel to the top'"
                       :aria-label="(ch.pinned ? 'Unpin ' : 'Pin ') + ch.name"
@@ -3364,6 +3377,53 @@ const EpgView = {
       await loadDay(day.value, { force: true })
     }
 
+    const dragPinId = ref(null)
+    const dropTargetId = ref(null)
+
+    const currentPins = () => (guide.value?.channels || [])
+      .filter((c) => c.pinned)
+      .map((c) => String(c.id))
+
+    const onPinDragStart = (ch, e) => {
+      dragPinId.value = String(ch.id)
+      e.dataTransfer.effectAllowed = 'move'
+      e.dataTransfer.setData('text/plain', String(ch.id))
+    }
+
+    const onPinDragOver = (ch, e) => {
+      if (!dragPinId.value || !ch.pinned || String(ch.id) === dragPinId.value) return
+      e.preventDefault()
+      e.dataTransfer.dropEffect = 'move'
+      dropTargetId.value = String(ch.id)
+    }
+
+    const onPinDragLeave = (ch) => {
+      if (dropTargetId.value === String(ch.id)) dropTargetId.value = null
+    }
+
+    const onPinDrop = async (ch, e) => {
+      if (!dragPinId.value || !ch.pinned) return
+      e.preventDefault()
+      const from = dragPinId.value
+      const to = String(ch.id)
+      dragPinId.value = null
+      dropTargetId.value = null
+      if (from === to) return
+      const pins = currentPins().filter((id) => id !== from)
+      pins.splice(pins.indexOf(to), 0, from)
+      try {
+        await api('PUT', '/api/epg/channel-prefs', { pinned_ids: pins })
+        await reloadGuide()
+      } catch (err) {
+        flash({ msg: `Reorder failed: ${err.message}`, kind: 'err', ms: 6000 })
+      }
+    }
+
+    const onPinDragEnd = () => {
+      dragPinId.value = null
+      dropTargetId.value = null
+    }
+
     const togglePin = async (ch) => {
       const pinned = (guide.value?.channels || [])
         .filter((c) => c.pinned)
@@ -3485,6 +3545,7 @@ const EpgView = {
       busyId, channelsModal, openChannelsModal, hiddenDraft, toggleHidden,
       pinnedDraft, sortDraft, sortOptions, savingPrefs, saveChannelPrefs,
       togglePin, toggleDraftPin, movePin, draftName, isFirstUnpinned,
+      dropTargetId, onPinDragStart, onPinDragOver, onPinDragLeave, onPinDrop, onPinDragEnd,
       channelById, channelName, fmtClock, fmtDayTime, seLabel, ratingLabel, tsOf,
       flashText, flashKind,
     }

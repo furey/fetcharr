@@ -26,6 +26,13 @@ hero:
       link: /deep-dive
 
 features:
+  - title: TV Guide
+    details: >-
+      A 7-day programme guide in the browser: schedule, cancel, and
+      series-record on the box, with pinned favourite channels — no Fetch
+      mobile app needed.
+    link: /guide/tv-guide
+    linkText: Browse and record
   - title: Per-show follow
     details: >-
       Pick a Fetch show, fuzzy-match it to a folder under your media root, set a

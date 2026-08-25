@@ -12,12 +12,14 @@ const DESKTOP_SHOTS = [
   { hash: '#/syncs',      file: 'screenshot-syncs.png',      wait: '.panel-title' },
   { hash: '#/recordings', file: 'screenshot-recordings.png', wait: '.panel-title' },
   { hash: '#/settings',   file: 'screenshot-settings.png',   wait: '.panel-title' },
+  { hash: '#/guide',      file: 'screenshot-guide.png',      wait: '.epg-cell' },
 ]
 
 const MOBILE_SHOTS = [
   { hash: '#/dashboard',  file: 'screenshot-mobile-dashboard.png',  wait: '.panel-title' },
   { hash: '#/shows',      file: 'screenshot-mobile-shows.png',      wait: '.panel-title' },
   { hash: '#/recordings', file: 'screenshot-mobile-recordings.png', wait: '.panel-title' },
+  { hash: '#/guide',      file: 'screenshot-mobile-guide.png',      wait: '.epg-cell' },
 ]
 
 const SANITISED_SETTINGS = {

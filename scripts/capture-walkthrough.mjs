@@ -48,7 +48,131 @@ const syncs = [
   { id: 125, started_at: '2026-07-12 03:00:00', finished_at: '2026-07-12 03:06:55', status: 'partial', summary_json: '{}', summary: { trigger: 'cron', downloaded: 2, skipped: 4, failed: 1, errors: ['MasterChef Australia - S16E30: truncated'], plex: { triggered: true, status: 200 } } },
 ]
 
+const EPG_TITLES = [
+  'News Breakfast', 'Gardening Australia', 'Hard Quiz', 'The Weekly', 'Australian Story',
+  'Four Corners', 'Media Watch', 'Insiders', 'Grand Designs', 'Midsomer Murders',
+  'The Project', 'MasterChef Australia', 'Have You Been Paying Attention?', 'The Cheap Seats',
+  'SBS World News', 'Mastermind', 'The Dog House', 'Antiques Roadshow', 'The Chase Australia',
+]
+
+const epgChannels = [
+  { number: 2, name: 'ABC TV', hd: true, pinned: true },
+  { number: 3, name: 'SBS', hd: true, pinned: true },
+  { number: 10, name: '10', hd: true, pinned: false },
+  { number: 21, name: 'ABC TV Plus', hd: false, pinned: false },
+  { number: 22, name: 'ABC ME', hd: false, pinned: false },
+  { number: 24, name: 'ABC News', hd: true, pinned: false },
+  { number: 31, name: 'SBS Viceland', hd: true, pinned: false },
+  { number: 33, name: 'SBS Food', hd: false, pinned: false },
+  { number: 70, name: 'Seven', hd: true, pinned: false },
+  { number: 72, name: '7two', hd: false, pinned: false },
+  { number: 90, name: 'Nine', hd: true, pinned: false },
+  { number: 92, name: '9Gem', hd: false, pinned: false },
+].map((c, i) => ({
+  id: 100 + i, epgId: 1000 + i, ...c, hidden: false, recordable: true,
+  logo: 'stub', thumb: 'stub', description: c.name,
+}))
+
+const epgMidnight = (() => {
+  const d = new Date()
+  d.setHours(0, 0, 0, 0)
+  return d.getTime()
+})()
+
+const epgPrograms = {}
+for (const ch of epgChannels) {
+  const rows = []
+  let seed = ch.id * 2654435761 % 2147483647
+  const rand = () => (seed = (seed * 48271) % 2147483647) / 2147483647
+  let t = epgMidnight
+  let pid = ch.id * 100000
+  while (t < epgMidnight + 86_400_000) {
+    const durMin = [30, 30, 60, 60, 90][Math.floor(rand() * 5)]
+    const title = EPG_TITLES[Math.floor(rand() * EPG_TITLES.length)]
+    const hasSeries = rand() > 0.45
+    rows.push({
+      program_id: pid, epg_program_id: pid + 7, title,
+      start: t, end: t + durMin * 60_000,
+      synopsis: `${title} — tonight's episode.`, rating: 'PG', genre: 'Entertainment',
+      series_link: hasSeries ? `sl-${ch.id}-${title.replace(/\W/g, '')}` : null,
+      episode_title: hasSeries ? `Episode ${1 + Math.floor(rand() * 10)}` : null,
+      series_no: hasSeries ? 1 + Math.floor(rand() * 3) : null,
+      episode_no: hasSeries ? 1 + Math.floor(rand() * 10) : null,
+    })
+    t += durMin * 60_000
+    pid += 1
+  }
+  epgPrograms[ch.id] = rows
+}
+
+const orderedEpgChannels = [
+  ...epgChannels.filter((c) => c.pinned),
+  ...epgChannels.filter((c) => !c.pinned),
+]
+
+const epgFlat = Object.entries(epgPrograms)
+  .flatMap(([chId, rows]) => rows.map((p) => ({ ...p, channelId: Number(chId) })))
+const epgNowMs = Date.now()
+const epgOnNowByChannel = new Map(
+  epgFlat.filter((p) => p.start <= epgNowMs && p.end > epgNowMs).map((p) => [p.channelId, p]))
+const epgScheduled = epgFlat
+  .filter((p) => p.start > epgNowMs)
+  .sort((a, b) => a.start - b.start)
+  .filter((p, i) => [1, 4, 9].includes(i))
+
+const epgGuide = {
+  day: 0, dayStart: epgMidnight, dayEnd: epgMidnight + 86_400_000,
+  fetchedAt: epgNowMs, sort: 'default',
+  channels: orderedEpgChannels, programs: epgPrograms,
+}
+
+const epgState = {
+  standby: false,
+  storageInfo: { freeSize: 240 },
+  tunerCount: 4,
+  maxConcurrentRecordings: 6,
+  futureRecordings: epgScheduled.map((p, i) => ({
+    id: 9000 + i, name: p.title, channelId: p.channelId, programId: p.program_id,
+    episodeTitle: p.episode_title, startDate: p.start, endDate: p.end,
+    seriesLinkId: p.series_link, pendingDelete: false,
+  })),
+  seriesTags: [
+    { id: 'sl-hq', seriesLinkId: 'sl-hq', name: 'Hard Quiz', channelId: 100, episodesToKeep: 0 },
+    { id: 'sl-gd', seriesLinkId: 'sl-gd', name: 'Grand Designs', channelId: 101, episodesToKeep: 5 },
+  ],
+  activeRecordingIds: [],
+  fetchedAt: epgNowMs,
+}
+
+const epgNow = {
+  entries: orderedEpgChannels.filter((c) => c.pinned).map((c) => {
+    const now = epgOnNowByChannel.get(c.id) || null
+    const next = epgFlat
+      .filter((p) => p.channelId === c.id && p.start > epgNowMs)
+      .sort((a, b) => a.start - b.start)[0] || null
+    return {
+      channel: { id: c.id, name: c.name, number: c.number, hasLogo: true },
+      now, next,
+    }
+  }),
+}
+
+const CHANNEL_TINTS = ['#009be4', '#f10c69', '#e2b03c', '#4ebef0', '#ff5c97', '#ffcd00']
+const logoSvg = (id) => {
+  const ch = epgChannels.find((c) => String(c.id) === String(id))
+  const tint = CHANNEL_TINTS[(ch?.id ?? 0) % CHANNEL_TINTS.length]
+  const label = (ch?.name ?? '?').replace(/[^A-Za-z0-9]/g, '').slice(0, 2).toUpperCase()
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">`
+    + `<rect x="4" y="4" width="56" height="56" rx="12" fill="${tint}" opacity="0.85"/>`
+    + `<text x="32" y="41" font-family="monospace" font-size="24" font-weight="bold" `
+    + `fill="#1a1611" text-anchor="middle">${label}</text></svg>`
+}
+
 const routes = [
+  ['**/api/epg/guide**', epgGuide],
+  ['**/api/epg/state**', epgState],
+  ['**/api/epg/now', epgNow],
+  ['**/api/epg/search**', { results: [] }],
   ['**/api/settings', settings],
   ['**/api/sync-status', { activeSyncId: null, cron: '0 3 * * *' }],
   ['**/api/syncs**', { syncs }],
@@ -139,6 +263,15 @@ const run = async () => {
     })
   }
 
+  await context.route('**/api/epg/logo/**', (route) => {
+    const id = route.request().url().split('/').pop()
+    return route.fulfill({ status: 200, contentType: 'image/svg+xml', body: logoSvg(id) })
+  })
+  await context.route('**/api/epg/artwork/**', (route) => {
+    const id = route.request().url().split('/').pop()
+    return route.fulfill({ status: 200, contentType: 'image/svg+xml', body: logoSvg(id) })
+  })
+
   const page = await context.newPage()
   const startedAt = Date.now()
   await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded' })
@@ -153,6 +286,27 @@ const run = async () => {
   const settledAt = Date.now()
 
   await page.waitForTimeout(2200)
+
+  await clickTab(page, 'guide')
+  await page.waitForSelector('.epg-cell', { timeout: 8000 }).catch(() => {})
+  await page.waitForTimeout(1600)
+  const onNowCell = page.locator('.epg-cell.on-now').nth(1)
+  const cellBox = await onNowCell.boundingBox().catch(() => null)
+  if (cellBox) {
+    await cursorTo(page, Math.round(cellBox.x + cellBox.width / 2), Math.round(cellBox.y + cellBox.height / 2))
+    await page.evaluate(() => window.__wt?.click())
+    await onNowCell.click()
+    await page.waitForSelector('.epg-modal', { timeout: 5000 }).catch(() => {})
+    await page.waitForTimeout(2200)
+    await page.keyboard.press('Escape')
+    await page.waitForTimeout(500)
+  }
+  const scrollBox = await page.locator('.epg-scroll').boundingBox().catch(() => null)
+  if (scrollBox) {
+    await page.mouse.move(scrollBox.x + scrollBox.width / 2, scrollBox.y + scrollBox.height / 2)
+    await page.mouse.wheel(420, 0)
+    await page.waitForTimeout(1400)
+  }
 
   await clickTab(page, 'shows')
   await page.waitForSelector('.deck-table tbody tr, .deck-card', { timeout: 8000 }).catch(() => {})
@@ -181,7 +335,11 @@ const run = async () => {
   await clickTab(page, 'dashboard')
   await page.waitForSelector('.panel-title', { timeout: 8000 }).catch(() => {})
   await cursorTo(page, 250, 96)
-  await page.waitForTimeout(2200)
+  await page.waitForTimeout(1200)
+  await page.mouse.wheel(0, 360)
+  await page.waitForTimeout(1800)
+  await page.mouse.wheel(0, -360)
+  await page.waitForTimeout(1000)
 
   const video = page.video()
   await context.close()
