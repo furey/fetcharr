@@ -33,6 +33,8 @@ import {
   cancelProgram,
   recordSeries,
   cancelSeries,
+  setChannelPrefs,
+  getOnNowForPinned,
 } from './epg.js'
 import {
   startManualAdScan,
@@ -487,11 +489,31 @@ app.post('/api/epg/cancel-series', epgLimiter, doubleCsrfProtection, async (req,
   }
 })
 
-app.put('/api/epg/hidden-channels', doubleCsrfProtection, async (req, res) => {
-  const ids = req.body?.channel_ids
-  if (!Array.isArray(ids)) return res.status(400).json({ error: 'channel_ids must be an array' })
-  await setSetting('epg_hidden_channels', JSON.stringify(ids.map(String)))
-  res.json({ ok: true, hidden: ids.length })
+app.put('/api/epg/channel-prefs', doubleCsrfProtection, async (req, res) => {
+  const { pinned_ids, hidden_ids, sort } = req.body || {}
+  if (pinned_ids != null && !Array.isArray(pinned_ids)) {
+    return res.status(400).json({ error: 'pinned_ids must be an array' })
+  }
+  if (hidden_ids != null && !Array.isArray(hidden_ids)) {
+    return res.status(400).json({ error: 'hidden_ids must be an array' })
+  }
+  if (sort != null && !['default', 'number', 'name'].includes(sort)) {
+    return res.status(400).json({ error: 'sort must be default, number or name' })
+  }
+  const prefs = await setChannelPrefs({
+    ...(pinned_ids != null ? { pinnedIds: pinned_ids } : {}),
+    ...(hidden_ids != null ? { hiddenIds: hidden_ids } : {}),
+    ...(sort != null ? { sort } : {}),
+  })
+  res.json({ ok: true, ...prefs })
+})
+
+app.get('/api/epg/now', async (req, res) => {
+  try {
+    res.json(await getOnNowForPinned())
+  } catch (err) {
+    epgError(res, err, 'now')
+  }
 })
 
 app.get('/api/shows', async (req, res) => {

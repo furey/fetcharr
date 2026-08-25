@@ -344,6 +344,19 @@ const within7Days = (s) => {
   return Number.isFinite(t) && (Date.now() - t) < 7 * 24 * 60 * 60 * 1000
 }
 
+const fmtClockTz = (ms) => new Intl.DateTimeFormat('en-AU', {
+  timeZone: tz.value, hour: 'numeric', minute: '2-digit',
+}).format(new Date(ms)).replace(/\s/g, '').toLowerCase()
+
+const tsOfMs = (v) => {
+  if (v == null) return 0
+  if (typeof v === 'number') return v
+  const n = Number(v)
+  if (Number.isFinite(n)) return n
+  const t = new Date(v).getTime()
+  return Number.isFinite(t) ? t : 0
+}
+
 const DashboardView = {
   template: `
     <div class="view-reveal space-y-6">
@@ -407,6 +420,47 @@ const DashboardView = {
         </article>
       </section>
 
+      <section v-if="cloudConfigured && guideOk" class="panel">
+        <header class="panel-header">
+          <span class="panel-title">TV GUIDE</span>
+          <a href="#/guide" class="text-xs font-mono uppercase tracking-[0.16em]">Open guide →</a>
+        </header>
+        <div class="panel-body space-y-5">
+          <div v-if="onNow.length" class="space-y-3">
+            <div v-for="e in onNow" :key="e.channel.id" class="flex items-center gap-3 md:gap-4">
+              <img v-if="e.channel.hasLogo" class="epg-rail-logo shrink-0" :src="'/api/epg/logo/' + e.channel.id" alt=""
+                @error="$event.target.style.display = 'none'" />
+              <span class="font-mono text-xs text-ink-dim w-20 md:w-28 shrink-0 truncate" :title="e.channel.name">{{ e.channel.name }}</span>
+              <div class="flex-1 min-w-0">
+                <template v-if="e.now">
+                  <span class="text-sm text-ink block truncate">{{ e.now.title }}</span>
+                  <div class="progress" style="margin-top: 0.25rem; max-width: none;">
+                    <div class="progress-track">
+                      <div class="progress-fill" :style="{ width: onNowPercent(e.now) + '%' }"></div>
+                    </div>
+                  </div>
+                </template>
+                <span v-else class="text-sm text-ink-mute">off air</span>
+              </div>
+              <span v-if="e.next" class="hidden sm:block font-mono text-xs text-ink-dim min-w-0 max-w-[16rem] truncate">
+                next · {{ e.next.title }} · {{ fmtClockTz(e.next.start) }}
+              </span>
+            </div>
+          </div>
+          <p v-else class="text-xs text-ink-dim">
+            Pin channels in the <a href="#/guide">TV Guide</a> (★ in the channel rail) to see what's on now.
+          </p>
+          <div v-if="guideUpcoming.length">
+            <div class="text-xs font-mono uppercase tracking-[0.16em] text-ink-dim mb-2">Next recordings</div>
+            <p v-for="r in guideUpcoming" :key="r.id" class="font-mono text-xs text-ink-dim truncate">
+              <span class="led-dot sm" style="background:#009be4"></span>
+              <span class="text-ink">{{ r.name }}</span>
+              · {{ fmtClockTz(tsOfMs(r.startDate)) }}<template v-if="r.episodeTitle"> · {{ r.episodeTitle }}</template>
+            </p>
+          </div>
+        </div>
+      </section>
+
       <section class="panel">
         <header class="panel-header">
           <span class="panel-title">RECENT SYNCS</span>
@@ -452,8 +506,34 @@ const DashboardView = {
     const plexConfigured = ref(false)
     const cloudTerminalId = ref('')
     const cloudConfigured = ref(false)
+    const onNow = ref([])
+    const guideUpcoming = ref([])
+    const guideOk = ref(true)
 
     const lastSync = computed(() => recentSyncs.value[0] || null)
+
+    const onNowPercent = (p) => {
+      const span = p.end - p.start
+      if (span <= 0) return 0
+      return Math.min(100, Math.max(0, Math.round(((Date.now() - p.start) / span) * 100)))
+    }
+
+    const loadGuidePanel = async () => {
+      if (!cloudConfigured.value) return
+      try {
+        const r = await api('GET', '/api/epg/now')
+        onNow.value = r.entries || []
+        guideOk.value = true
+      } catch {
+        guideOk.value = false
+        return
+      }
+      const s = await api('GET', '/api/epg/state').catch(() => null)
+      guideUpcoming.value = (s?.futureRecordings || [])
+        .filter((r) => !r.pendingDelete)
+        .sort((a, b) => tsOfMs(a.startDate) - tsOfMs(b.startDate))
+        .slice(0, 3)
+    }
 
     const plexLabel = computed(() => plexConfigured.value ? 'Connected' : 'Not configured')
     const plexClass = computed(() => plexConfigured.value ? 'text-plex-yellow' : 'text-ink-dim')
@@ -485,6 +565,7 @@ const DashboardView = {
         && settings.fetch_cloud_terminal_id,
       )
       cloudTerminalId.value = settings.fetch_cloud_terminal_id || ''
+      loadGuidePanel()
     }
 
     const syncNow = async () => {
@@ -518,7 +599,8 @@ const DashboardView = {
       syncStatus, lastSync, recentSyncs,
       showCount, showEnabledCount, recordingsTotal, recordings7dCount,
       plexLabel, plexClass, plexHost,
-      cloudLabel, cloudClass, cloudTerminalId,
+      cloudLabel, cloudClass, cloudTerminalId, cloudConfigured,
+      onNow, guideUpcoming, guideOk, onNowPercent, fmtClockTz, tsOfMs,
       starting, syncNow, fmtTime,
       flashText, flashKind,
     }
@@ -2719,8 +2801,13 @@ const EpgView = {
                     <span v-for="t in ticks" :key="t.x" class="epg-tick" :style="{ left: t.x + 'px' }">{{ t.label }}</span>
                   </div>
                 </div>
-                <div v-for="ch in visibleChannels" :key="ch.id" class="epg-row">
+                <div v-for="(ch, i) in visibleChannels" :key="ch.id"
+                  :class="['epg-row', { 'epg-pin-divider': isFirstUnpinned(i) }]">
                   <div class="epg-rail-cell" :style="{ width: railPx + 'px' }">
+                    <button type="button" :class="['epg-pin', { pinned: ch.pinned }]"
+                      :title="ch.pinned ? 'Unpin channel' : 'Pin channel to the top'"
+                      :aria-label="(ch.pinned ? 'Unpin ' : 'Pin ') + ch.name"
+                      @click="togglePin(ch)">★</button>
                     <span class="epg-rail-num">{{ ch.number ?? '' }}</span>
                     <img v-if="ch.logo" class="epg-rail-logo" :src="'/api/epg/logo/' + ch.id" alt="" loading="lazy" @error="$event.target.style.display = 'none'" />
                     <span class="epg-rail-name">{{ ch.name }}</span>
@@ -2860,18 +2947,58 @@ const EpgView = {
             <span class="panel-title">CHANNELS</span>
             <button type="button" class="btn btn-sm btn-icon" @click="channelsModal = false" aria-label="Close">✕</button>
           </header>
-          <div class="panel-body space-y-4">
-            <p class="text-xs text-ink-dim">Untick a channel to hide it from the guide.</p>
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
-              <label v-for="ch in guide?.channels || []" :key="ch.id" class="flex items-center gap-2.5 text-sm cursor-pointer">
-                <input type="checkbox" class="chk" :checked="!hiddenDraft.has(String(ch.id))" @change="toggleHidden(ch)" />
-                <span class="font-mono text-[0.8rem]">{{ ch.name }}<span v-if="ch.hd" class="text-ink-mute"> · HD</span></span>
-              </label>
+          <div class="panel-body space-y-5">
+            <div>
+              <label class="field-label">PINNED · SHOWN FIRST, IN THIS ORDER</label>
+              <p v-if="pinnedDraft.length === 0" class="text-xs text-ink-dim">
+                Nothing pinned yet — hit the ★ next to a channel below (or in the guide rail).
+              </p>
+              <ul v-else class="space-y-1.5">
+                <li v-for="(id, i) in pinnedDraft" :key="id" class="flex items-center gap-2">
+                  <button type="button" class="btn btn-sm btn-icon" :disabled="i === 0"
+                    @click="movePin(i, -1)" :aria-label="'Move ' + draftName(id) + ' up'">↑</button>
+                  <button type="button" class="btn btn-sm btn-icon" :disabled="i === pinnedDraft.length - 1"
+                    @click="movePin(i, 1)" :aria-label="'Move ' + draftName(id) + ' down'">↓</button>
+                  <span class="font-mono text-[0.8rem] flex-1 min-w-0 truncate">
+                    <span class="text-signal-yellow">★</span> {{ draftName(id) }}
+                  </span>
+                  <button type="button" class="btn btn-sm btn-icon" @click="toggleDraftPin(id)"
+                    :aria-label="'Unpin ' + draftName(id)">✕</button>
+                </li>
+              </ul>
+            </div>
+            <div>
+              <label class="field-label">SORT UNPINNED CHANNELS BY</label>
+              <div class="chip-row">
+                <button v-for="s in sortOptions" :key="s.key" type="button"
+                  :class="['btn', 'btn-sm', sortDraft === s.key ? 'btn-primary' : '']"
+                  @click="sortDraft = s.key">{{ s.label }}</button>
+              </div>
+            </div>
+            <div>
+              <label class="field-label">ALL CHANNELS · ★ PINS, TICK SHOWS</label>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
+                <div v-for="ch in guide?.channels || []" :key="ch.id" class="flex items-center gap-2">
+                  <button type="button" :class="['epg-pin', { pinned: pinnedDraft.includes(String(ch.id)) }]"
+                    @click="toggleDraftPin(String(ch.id))"
+                    :aria-label="(pinnedDraft.includes(String(ch.id)) ? 'Unpin ' : 'Pin ') + ch.name">★</button>
+                  <label class="flex items-center gap-2.5 text-sm cursor-pointer min-w-0">
+                    <input type="checkbox" class="chk"
+                      :checked="!hiddenDraft.has(String(ch.id))"
+                      :disabled="pinnedDraft.includes(String(ch.id))"
+                      @change="toggleHidden(ch)" />
+                    <span class="font-mono text-[0.8rem] truncate">
+                      <span class="text-ink-mute">{{ ch.number ?? '' }}</span>
+                      {{ ch.name }}<span v-if="ch.hd" class="text-ink-mute"> · HD</span>
+                    </span>
+                  </label>
+                </div>
+              </div>
             </div>
             <div class="flex items-center justify-end gap-2 pt-1">
               <button type="button" class="btn btn-sm" @click="channelsModal = false">CANCEL</button>
-              <button type="button" class="btn btn-sm btn-primary" @click="saveHidden" :disabled="savingHidden">
-                {{ savingHidden ? 'SAVING…' : 'SAVE' }}
+              <button type="button" class="btn btn-sm btn-primary" @click="saveChannelPrefs" :disabled="savingPrefs">
+                {{ savingPrefs ? 'SAVING…' : 'SAVE' }}
               </button>
             </div>
           </div>
@@ -2904,7 +3031,14 @@ const EpgView = {
     const busyId = ref(null)
     const channelsModal = ref(false)
     const hiddenDraft = ref(new Set())
-    const savingHidden = ref(false)
+    const pinnedDraft = ref([])
+    const sortDraft = ref('default')
+    const savingPrefs = ref(false)
+    const sortOptions = [
+      { key: 'default', label: 'BOX ORDER' },
+      { key: 'number', label: 'NUMBER' },
+      { key: 'name', label: 'NAME' },
+    ]
     const leadTime = ref(3)
     const lagTime = ref(5)
     const episodesToKeep = ref(0)
@@ -3000,18 +3134,8 @@ const EpgView = {
         ? (selected.value.channel || channelById(selected.value.program.channelId))
         : null)
 
-    const tsOf = (v) => {
-      if (v == null) return 0
-      if (typeof v === 'number') return v
-      const n = Number(v)
-      if (Number.isFinite(n)) return n
-      const t = new Date(v).getTime()
-      return Number.isFinite(t) ? t : 0
-    }
-
-    const fmtClock = (ms) => new Intl.DateTimeFormat('en-AU', {
-      timeZone: tz.value, hour: 'numeric', minute: '2-digit',
-    }).format(new Date(ms)).replace(/\s/g, '').toLowerCase()
+    const tsOf = tsOfMs
+    const fmtClock = fmtClockTz
 
     const fmtDayTime = (ms) => new Intl.DateTimeFormat('en-AU', {
       timeZone: tz.value, weekday: 'short', day: 'numeric', month: 'short',
@@ -3230,10 +3354,56 @@ const EpgView = {
       }
     }
 
+    const isFirstUnpinned = (i) => {
+      const list = visibleChannels.value
+      return i > 0 && !list[i].pinned && list[i - 1].pinned
+    }
+
+    const reloadGuide = async () => {
+      guideByDay.clear()
+      await loadDay(day.value, { force: true })
+    }
+
+    const togglePin = async (ch) => {
+      const pinned = (guide.value?.channels || [])
+        .filter((c) => c.pinned)
+        .map((c) => String(c.id))
+      const key = String(ch.id)
+      const next = pinned.includes(key) ? pinned.filter((id) => id !== key) : [...pinned, key]
+      try {
+        await api('PUT', '/api/epg/channel-prefs', { pinned_ids: next })
+        await reloadGuide()
+      } catch (err) {
+        flash({ msg: `Pin failed: ${err.message}`, kind: 'err', ms: 6000 })
+      }
+    }
+
     const openChannelsModal = () => {
-      hiddenDraft.value = new Set(
-        (guide.value?.channels || []).filter((c) => c.hidden).map((c) => String(c.id)))
+      const channels = guide.value?.channels || []
+      pinnedDraft.value = channels.filter((c) => c.pinned).map((c) => String(c.id))
+      hiddenDraft.value = new Set(channels.filter((c) => c.hidden).map((c) => String(c.id)))
+      sortDraft.value = guide.value?.sort || 'default'
       channelsModal.value = true
+    }
+
+    const draftName = (id) => channelById(id)?.name || `channel ${id}`
+
+    const toggleDraftPin = (id) => {
+      if (pinnedDraft.value.includes(id)) {
+        pinnedDraft.value = pinnedDraft.value.filter((p) => p !== id)
+      } else {
+        pinnedDraft.value = [...pinnedDraft.value, id]
+        const next = new Set(hiddenDraft.value)
+        next.delete(id)
+        hiddenDraft.value = next
+      }
+    }
+
+    const movePin = (i, delta) => {
+      const next = [...pinnedDraft.value]
+      const [moved] = next.splice(i, 1)
+      next.splice(i + delta, 0, moved)
+      pinnedDraft.value = next
     }
 
     const toggleHidden = (ch) => {
@@ -3244,18 +3414,21 @@ const EpgView = {
       hiddenDraft.value = next
     }
 
-    const saveHidden = async () => {
-      savingHidden.value = true
+    const saveChannelPrefs = async () => {
+      savingPrefs.value = true
       try {
-        await api('PUT', '/api/epg/hidden-channels', { channel_ids: [...hiddenDraft.value] })
+        await api('PUT', '/api/epg/channel-prefs', {
+          pinned_ids: pinnedDraft.value,
+          hidden_ids: [...hiddenDraft.value],
+          sort: sortDraft.value,
+        })
         channelsModal.value = false
-        guideByDay.clear()
-        await loadDay(day.value, { force: true })
-        flash({ msg: 'Channel list saved.' })
+        await reloadGuide()
+        flash({ msg: 'Channel preferences saved.' })
       } catch (err) {
         flash({ msg: `Save failed: ${err.message}`, kind: 'err', ms: 6000 })
       } finally {
-        savingHidden.value = false
+        savingPrefs.value = false
       }
     }
 
@@ -3309,7 +3482,9 @@ const EpgView = {
       recordSelected, recordSelectedSeries, cancelSelected,
       upcoming, seriesTags, seriesKey, cancelUpcoming, cancelSeriesTag,
       isActiveRecording: (r) => activeRecordingSet.value.has(String(r.id)),
-      busyId, channelsModal, openChannelsModal, hiddenDraft, toggleHidden, saveHidden, savingHidden,
+      busyId, channelsModal, openChannelsModal, hiddenDraft, toggleHidden,
+      pinnedDraft, sortDraft, sortOptions, savingPrefs, saveChannelPrefs,
+      togglePin, toggleDraftPin, movePin, draftName, isFirstUnpinned,
       channelById, channelName, fmtClock, fmtDayTime, seLabel, ratingLabel, tsOf,
       flashText, flashKind,
     }

@@ -729,6 +729,33 @@ a.icon-link {
   overflow: hidden;
 }
 
+.epg-pin {
+  flex: none;
+  border: none;
+  background: none;
+  padding: 0 0.1rem;
+  font-size: 0.85rem;
+  line-height: 1;
+  color: #544e47;
+  cursor: pointer;
+  transition: color 0.15s ease, transform 0.15s ease;
+}
+
+@media (hover: hover) {
+  .epg-pin:hover {
+    color: #ffcd00;
+    transform: scale(1.15);
+  }
+}
+
+.epg-pin.pinned {
+  color: #ffcd00;
+}
+
+.epg-row.epg-pin-divider {
+  border-top: 1px dashed rgba(255, 205, 0, 0.35);
+}
+
 .epg-rail-num {
   flex: none;
   min-width: 1.6rem;

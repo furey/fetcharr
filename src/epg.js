@@ -21,13 +21,124 @@ export const getGuideDay = async ({ day = 0 } = {}) => {
     const rows = guide.programsByChannel[String(channel.epgId)] || []
     programs[channel.id] = rows.filter((p) => p.start < dayEnd && p.end > dayStart)
   }
+  const prefs = await getChannelPrefs()
   return {
     day,
     dayStart,
     dayEnd,
     fetchedAt: guide.fetchedAt,
-    channels: await withHiddenFlags(guide.channels),
+    sort: prefs.sort,
+    channels: orderChannels({ channels: guide.channels, ...prefs }),
     programs,
+  }
+}
+
+// Pinned channels float to the top in pin order; the rest follow in the chosen
+// sort. Hidden and pinned are mutually exclusive (enforced on save).
+export const orderChannels = ({ channels, pinnedIds = [], hiddenIds = [], sort = 'default' }) => {
+  const hiddenSet = new Set(hiddenIds.map(String))
+  const pinOrder = new Map(pinnedIds.map((id, i) => [String(id), i]))
+  const annotated = channels.map((c) => {
+    const pinned = pinOrder.has(String(c.id))
+    return { ...c, pinned, hidden: !pinned && hiddenSet.has(String(c.id)) }
+  })
+  const pinned = annotated
+    .filter((c) => c.pinned)
+    .sort((a, b) => pinOrder.get(String(a.id)) - pinOrder.get(String(b.id)))
+  const rest = annotated.filter((c) => !c.pinned)
+  if (sort === 'name') {
+    rest.sort((a, b) => a.name.localeCompare(b.name, 'en-AU', { numeric: true, sensitivity: 'base' }))
+  } else if (sort === 'number') {
+    rest.sort((a, b) => (a.number ?? Infinity) - (b.number ?? Infinity))
+  }
+  return [...pinned, ...rest]
+}
+
+export const getChannelPrefs = async () => {
+  const [pinnedRaw, hiddenRaw, sortRaw] = await Promise.all([
+    getSetting('epg_pinned_channels'),
+    getSetting('epg_hidden_channels'),
+    getSetting('epg_channel_sort'),
+  ])
+  return {
+    pinnedIds: parseJsonArray(pinnedRaw),
+    hiddenIds: parseJsonArray(hiddenRaw),
+    sort: CHANNEL_SORTS.includes(sortRaw) ? sortRaw : 'default',
+  }
+}
+
+// Partial update; pinning a channel unhides it, hiding one unpins it.
+export const setChannelPrefs = async ({ pinnedIds, hiddenIds, sort } = {}) => {
+  const current = await getChannelPrefs()
+  const next = {
+    pinnedIds: pinnedIds ?? current.pinnedIds,
+    hiddenIds: hiddenIds ?? current.hiddenIds,
+    sort: sort ?? current.sort,
+  }
+  if (!CHANNEL_SORTS.includes(next.sort)) next.sort = 'default'
+  const pinnedSet = new Set(next.pinnedIds.map(String))
+  next.hiddenIds = next.hiddenIds.map(String).filter((id) => !pinnedSet.has(id))
+  next.pinnedIds = next.pinnedIds.map(String)
+  await Promise.all([
+    setSetting('epg_pinned_channels', JSON.stringify(next.pinnedIds)),
+    setSetting('epg_hidden_channels', JSON.stringify(next.hiddenIds)),
+    setSetting('epg_channel_sort', next.sort),
+  ])
+  return next
+}
+
+// On-now / up-next for the pinned channels, served from the guide cache — the
+// dashboard's TV Guide panel.
+export const getOnNowForPinned = async ({ nowMs = Date.now() } = {}) => {
+  const guide = await getCachedGuide()
+  const { pinnedIds } = await getChannelPrefs()
+  const byId = new Map(guide.channels.map((c) => [String(c.id), c]))
+  const entries = []
+  for (const id of pinnedIds) {
+    const channel = byId.get(String(id))
+    if (!channel) continue
+    const rows = guide.programsByChannel[String(channel.epgId)] || []
+    const { now, next } = nowAndNext(rows, nowMs)
+    entries.push({
+      channel: {
+        id: channel.id,
+        name: channel.name,
+        number: channel.number ?? null,
+        hasLogo: Boolean(channel.logo),
+      },
+      now,
+      next,
+    })
+  }
+  return { entries }
+}
+
+export const nowAndNext = (programs, nowMs) => {
+  let now = null
+  let next = null
+  for (const p of programs) {
+    if (p.start <= nowMs && p.end > nowMs) now = p
+    else if (p.start > nowMs && (!next || p.start < next.start)) next = p
+  }
+  return { now: trimProgram(now), next: trimProgram(next) }
+}
+
+const trimProgram = (p) => p == null ? null : {
+  program_id: p.program_id,
+  epg_program_id: p.epg_program_id,
+  title: p.title,
+  episode_title: p.episode_title || null,
+  start: p.start,
+  end: p.end,
+  series_link: p.series_link || null,
+}
+
+const parseJsonArray = (raw) => {
+  try {
+    const parsed = JSON.parse(raw || '[]')
+    return Array.isArray(parsed) ? parsed.map(String) : []
+  } catch {
+    return []
   }
 }
 
@@ -233,19 +344,12 @@ const loadGuide = async (startMs) => {
   }
 }
 
-const withHiddenFlags = async (channels) => {
-  const raw = await getSetting('epg_hidden_channels')
-  let hidden = []
-  try { hidden = JSON.parse(raw || '[]') } catch { hidden = [] }
-  const hiddenSet = new Set(hidden.map(String))
-  return channels.map((c) => ({ ...c, hidden: hiddenSet.has(String(c.id)) }))
-}
-
 let guideCache = null
 let guideInflight = null
 let stateCache = null
 const imageCache = new Map()
 
+const CHANNEL_SORTS = ['default', 'number', 'name']
 const LOGO_IMAGE_KEYS = ['channel_logo_offstate', 'channel_logo_focus', 'drawer_channel_logo']
 const THUMB_IMAGE_KEYS = ['landscape_thumbnail', 'phone_environment_image']
 const DAY_MS = 24 * 60 * 60 * 1000
