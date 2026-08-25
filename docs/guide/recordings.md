@@ -1,7 +1,7 @@
 ---
 title: Recordings
 description: >-
-  The per-episode record — download outcomes, live progress bars, re-scans, and
+  The per-episode record: download outcomes, live progress bars, re-scans, and
   markers for recordings deleted from the box.
 ---
 
@@ -14,7 +14,7 @@ The Recordings tab is the per-episode record: every download Fetcharr has attemp
 ## Statuses
 
 - **done** — downloaded and complete.
-- **partial** — the download came up short of the size Fetch reported. The next sync picks up from where it stopped (using HTTP range requests), so a `partial` usually sorts itself out.
+- **partial** — the download came up short of the size Fetch reported. The next sync picks up from where it stopped (using HTTP range requests), so a `partial` usually completes then.
 - **skipped / recording** — the episode was still recording when the sync ran; it's retried on the next pass after it finishes.
 - **failed** — the download hit an error.
 

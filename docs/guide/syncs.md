@@ -7,7 +7,7 @@ description: >-
 
 # Syncs
 
-A sync is one pass over the Fetch box: browse its listings, match them against your followed shows, download anything new, then refresh Plex if something landed. The Syncs tab is the history of those passes.
+A sync is one pass over the Fetch box: browse its listings, match them against your followed shows, download anything new, then refresh Plex if a download completed. The Syncs tab is the history of those passes.
 
 ![The Syncs tab](../img/screenshot-syncs.png)
 
@@ -17,8 +17,8 @@ Set a schedule in Settings as a cron expression (the `* * * * *` timing string) 
 
 ## Reading a sync
 
-Each row shows what the pass did: downloads, failures, deletes, or nothing (empty). A sync is marked `ok` unless something failed. An incomplete download (a `partial` recording) counts as a failure rather than a skip, so it stands out at a glance instead of hiding in the noise.
+Each row shows what the pass did: downloads, failures, deletes, or nothing (empty). A sync is marked `ok` unless something failed. An incomplete download (a `partial` recording) counts as a failure rather than a skip, so it stands out at a glance.
 
 ## History
 
-Sync history trims itself to the latest 500 rows. Clear individual rows or the whole history from the tab, and filter by activity: `DOWNLOADS` / `FAILS` / `DELETES` / `EMPTY`.
+Sync history keeps the latest 500 rows. Clear individual rows or the whole history from the tab, and filter by activity: `DOWNLOADS` / `FAILS` / `DELETES` / `EMPTY`.

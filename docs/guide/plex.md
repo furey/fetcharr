@@ -1,7 +1,7 @@
 ---
 title: Plex
 description: >-
-  Optional Plex integration — token detection and a library refresh after every
+  Optional Plex integration; token detection and a library refresh after every
   sync that downloaded something.
 ---
 
