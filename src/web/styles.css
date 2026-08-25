@@ -681,6 +681,7 @@ a.icon-link {
   left: 0;
   z-index: 8;
   flex: none;
+  width: var(--epg-rail-px, 148px);
   display: flex;
   align-items: stretch;
   background: #28231b;
@@ -712,8 +713,6 @@ a.icon-link {
 .epg-row {
   display: flex;
   border-bottom: 1px solid rgba(61, 56, 41, 0.55);
-  content-visibility: auto;
-  contain-intrinsic-size: auto 3.4rem;
 }
 
 .epg-row:last-child {
@@ -727,6 +726,7 @@ a.icon-link {
   flex: none;
   display: flex;
   align-items: center;
+  width: var(--epg-rail-px, 148px);
   gap: 0.3rem;
   padding: 0 0.5rem;
   background: #28231b;
@@ -782,6 +782,10 @@ a.icon-link {
   box-shadow: inset 0 2px 0 0 #ffcd00;
 }
 
+.epg-row.epg-drop-target .epg-rail-cell {
+  box-shadow: inset 0 2px 0 0 #ffcd00, 8px 0 12px -8px rgba(0, 0, 0, 0.6);
+}
+
 .epg-row.epg-dragging {
   opacity: 0.6;
 }
@@ -830,7 +834,6 @@ a.icon-link {
   top: 0;
   right: -4px;
   width: 9px;
-  height: 70vh;
   z-index: 9;
   cursor: col-resize;
   touch-action: none;
@@ -934,6 +937,7 @@ a.icon-link {
   position: relative;
   flex: none;
   height: 3.4rem;
+  content-visibility: auto;
 }
 
 .epg-cell {

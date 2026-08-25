@@ -607,7 +607,7 @@ const DashboardView = {
       showCount, showEnabledCount, recordingsTotal, recordings7dCount,
       plexLabel, plexClass, plexHost,
       cloudLabel, cloudClass, cloudTerminalId, cloudConfigured,
-      onNow, guideUpcoming, guideOk, onNowPercent, fmtClockTz, tsOfMs,
+      onNow, guideUpcoming, guideOk, onNowPercent, isSeriesRec, fmtClockTz, tsOfMs,
       starting, syncNow, fmtTime,
       flashText, flashKind,
     }
@@ -2818,15 +2818,16 @@ const EpgView = {
               <button type="button" class="btn btn-sm" @click="loadDay(day, { force: true })">RETRY</button>
             </div>
             <div v-else-if="loading && !guide" class="text-ink-dim font-mono text-sm">▰▰ loading guide…</div>
-            <div v-else-if="guide" class="relative">
+            <div v-else-if="guide" class="relative" :style="{ '--epg-rail-px': railPx + 'px' }">
               <button v-if="pinsOffscreen" type="button" class="epg-pinned-chip" @click="scrollRailTop">↑ {{ pinnedCount }} PINNED</button>
               <div class="epg-scroll" ref="scrollEl">
-              <div class="epg-canvas" :style="{ width: canvasWidth + 'px' }">
+              <div class="epg-canvas" :style="{ width: 'calc(var(--epg-rail-px) + ' + trackWidth + 'px)' }">
                 <div class="epg-ruler">
-                  <div class="epg-ruler-corner" :style="{ width: railPx + 'px' }">
+                  <div class="epg-ruler-corner">
                     <input v-model="railFilter" type="search" class="epg-corner-filter"
                       placeholder="filter…" aria-label="Filter channels by number or name" />
                     <div class="epg-rail-resizer" title="Drag to resize the channel rail"
+                      :style="{ height: railStripH + 'px' }"
                       @pointerdown="onRailResizeDown"
                       @pointermove="onRailResizeMove"
                       @pointerup="onRailResizeUp"
@@ -2837,10 +2838,12 @@ const EpgView = {
                   </div>
                 </div>
                 <transition-group name="epg-rows" tag="div">
-                <div v-for="(ch, i) in visibleChannels" :key="ch.id"
+                <div v-for="ch in visibleChannels" :key="ch.id"
+                  v-show="rowShown(ch)"
+                  v-memo="[ch, nowMs, state, railNumWidth, rowShown(ch), firstUnpinnedId === String(ch.id), dropTargetId === String(ch.id), dragPinId === String(ch.id)]"
                   :data-channel-id="ch.id"
-                  :class="['epg-row', { 'epg-pin-divider': isFirstUnpinned(i), pinned: ch.pinned, 'epg-drop-target': dropTargetId === String(ch.id), 'epg-dragging': dragPinId === String(ch.id) }]">
-                  <div class="epg-rail-cell" :style="{ width: railPx + 'px' }"
+                  :class="['epg-row', { 'epg-pin-divider': firstUnpinnedId === String(ch.id), pinned: ch.pinned, 'epg-drop-target': dropTargetId === String(ch.id), 'epg-dragging': dragPinId === String(ch.id) }]">
+                  <div class="epg-rail-cell"
                     :title="ch.pinned ? 'Drag to reorder pinned channels' : null"
                     @pointerdown="onPinPointerDown(ch, $event)"
                     @pointermove="onPinPointerMove"
@@ -2873,7 +2876,7 @@ const EpgView = {
                   </div>
                 </div>
                 </transition-group>
-                <div v-if="day === 0 && nowX != null" class="epg-nowline" :style="{ left: (railPx + nowX) + 'px' }"></div>
+                <div v-if="day === 0 && nowX != null" class="epg-nowline" :style="{ left: 'calc(var(--epg-rail-px) + ' + nowX + 'px)' }"></div>
               </div>
               </div>
             </div>
@@ -3106,7 +3109,6 @@ const EpgView = {
     }
     const railPx = ref(storedRailPx())
     const trackWidth = EPG_DAY_MIN * EPG_PX_PER_MIN
-    const canvasWidth = computed(() => railPx.value + trackWidth)
 
     // Minute resolution on purpose: the seconds clock ref would otherwise
     // re-render every grid cell once a second (past/on-now classes read this).
@@ -3114,12 +3116,32 @@ const EpgView = {
 
     const railFilter = ref('')
 
-    const visibleChannels = computed(() => {
-      const base = (guide.value?.channels || []).filter((c) => !c.hidden)
+    const visibleChannels = computed(() =>
+      (guide.value?.channels || []).filter((c) => !c.hidden))
+
+    // The filter hides rows with v-show instead of removing them from the
+    // v-for: toggling display is a style flip, while remove-and-remount pays
+    // for every programme cell again.
+    const railMatchIds = computed(() => {
       const q = railFilter.value.trim().toLowerCase()
-      if (!q) return base
-      return base.filter((c) =>
-        (c.name || '').toLowerCase().includes(q) || String(c.number ?? '').startsWith(q))
+      if (!q) return null
+      const set = new Set()
+      for (const c of visibleChannels.value) {
+        if ((c.name || '').toLowerCase().includes(q) || String(c.number ?? '').startsWith(q)) {
+          set.add(String(c.id))
+        }
+      }
+      return set
+    })
+
+    const rowShown = (ch) => !railMatchIds.value || railMatchIds.value.has(String(ch.id))
+
+    const firstUnpinnedId = computed(() => {
+      const shown = visibleChannels.value.filter(rowShown)
+      for (let i = 1; i < shown.length; i++) {
+        if (!shown[i].pinned && shown[i - 1].pinned) return String(shown[i].id)
+      }
+      return null
     })
 
     const pinnedCount = computed(() => visibleChannels.value.filter((c) => c.pinned).length)
@@ -3447,11 +3469,6 @@ const EpgView = {
       }
     }
 
-    const isFirstUnpinned = (i) => {
-      const list = visibleChannels.value
-      return i > 0 && !list[i].pinned && list[i - 1].pinned
-    }
-
     const reloadGuide = async () => {
       guideByDay.clear()
       await loadDay(day.value, { force: true })
@@ -3569,20 +3586,32 @@ const EpgView = {
     const updatePinsOffscreen = () => {
       const el = scrollEl.value
       if (!el) { pinsOffscreen.value = false; return }
-      const rows = el.querySelectorAll('.epg-row.pinned')
-      if (!rows.length) { pinsOffscreen.value = false; return }
-      const last = rows[rows.length - 1].getBoundingClientRect()
+      const rects = [...el.querySelectorAll('.epg-row.pinned')]
+        .map((row) => row.getBoundingClientRect())
+        .filter((r) => r.height > 0)
+      if (!rects.length) { pinsOffscreen.value = false; return }
       const rulerBottom = el.getBoundingClientRect().top + el.querySelector('.epg-ruler').offsetHeight
-      pinsOffscreen.value = last.bottom < rulerBottom
+      pinsOffscreen.value = rects[rects.length - 1].bottom < rulerBottom
     }
 
     const scrollRailTop = () => scrollEl.value?.scrollTo({ top: 0, behavior: 'smooth' })
 
+    const railStripH = ref(0)
+    const syncRailStrip = () => { railStripH.value = scrollEl.value?.clientHeight || 0 }
+
+    let scrollRo = null
     watch(scrollEl, (el, prev) => {
       if (prev) prev.removeEventListener('scroll', updatePinsOffscreen)
-      if (el) el.addEventListener('scroll', updatePinsOffscreen, { passive: true })
+      if (scrollRo) { scrollRo.disconnect(); scrollRo = null }
+      if (el) {
+        el.addEventListener('scroll', updatePinsOffscreen, { passive: true })
+        scrollRo = new ResizeObserver(() => { syncRailStrip(); updatePinsOffscreen() })
+        scrollRo.observe(el)
+      }
+      syncRailStrip()
       updatePinsOffscreen()
     })
+    onUnmounted(() => { if (scrollRo) scrollRo.disconnect() })
 
     const railResize = { active: false, startX: 0, startW: 0 }
 
@@ -3714,7 +3743,7 @@ const EpgView = {
     return {
       mode, modes, setMode, day, dayChips, dayTitle, setDay,
       guide, loading, error, needsSetup, loadDay, state, stateError, stateLine,
-      scrollEl, railPx, trackWidth, canvasWidth, ticks, nowX, nowMs,
+      scrollEl, railPx, trackWidth, railStripH, railNumWidth, ticks, nowX, nowMs,
       visibleChannels, railNum, railFilter, pinnedCount, pinsOffscreen, scrollRailTop,
       cellState, cellStyle, cellWidth, cellTitle, isSeriesScheduled, isSeriesRec,
       jumpNow, jumpTonight, manualRefresh,
@@ -3727,7 +3756,7 @@ const EpgView = {
       isActiveRecording: (r) => activeRecordingSet.value.has(String(r.id)),
       busyId, channelsModal, openChannelsModal, hiddenDraft, toggleHidden,
       pinnedDraft, sortDraft, sortOptions, savingPrefs, saveChannelPrefs,
-      togglePin, toggleDraftPin, movePin, draftName, isFirstUnpinned,
+      togglePin, toggleDraftPin, movePin, draftName, rowShown, firstUnpinnedId,
       dropTargetId, dragPinId,
       onPinPointerDown, onPinPointerMove, onPinPointerUp, onPinPointerCancel,
       onRailResizeDown, onRailResizeMove, onRailResizeUp,

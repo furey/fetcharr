@@ -261,6 +261,29 @@ export const mergeChannels = ({ dvbChannels, cloudChannels }) => {
     .filter((c) => c.epgId != null)
 }
 
+// Fetch names an HD simulcast and its SD sibling identically (Sydney has two
+// channels called "7", LCN 70 and 71) — no HD flag exists anywhere in the
+// cloud directory, the DVB lineup, or the programme flags. Australian DVB
+// convention puts the HD primary on the x0 LCN, so when a name collides and
+// exactly one of the group sits on an x0 number, label that one HD.
+export const labelHdSimulcasts = (channels) => {
+  const byName = new Map()
+  for (const c of channels) {
+    const key = (c.name || '').trim().toLowerCase()
+    if (!key) continue
+    if (!byName.has(key)) byName.set(key, [])
+    byName.get(key).push(c)
+  }
+  for (const group of byName.values()) {
+    if (group.length < 2) continue
+    const onZero = group.filter((c) => c.number != null && c.number % 10 === 0)
+    if (onZero.length !== 1) continue
+    onZero[0].name = `${onZero[0].name} HD`
+    onZero[0].hd = true
+  }
+  return channels
+}
+
 // The box can list the same service twice (identical epg_id, DVB ids differing
 // only by a source prefix); keep the first occurrence in box order.
 export const dedupeByEpgId = (channels) => {
@@ -343,7 +366,7 @@ const loadGuide = async (startMs) => {
   } else {
     try { channels = JSON.parse(await getSetting('epg_channel_lineup') || '[]') } catch { channels = [] }
   }
-  channels = dedupeByEpgId(channels)
+  channels = labelHdSimulcasts(dedupeByEpgId(channels))
   if (channels.length === 0) {
     throw new FetchCloudError(
       "Could not read the box's channel lineup (box unreachable and no lineup cached yet)."
