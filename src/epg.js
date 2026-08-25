@@ -124,6 +124,68 @@ export const nowAndNext = (programs, nowMs) => {
   return { now: trimProgram(now), next: trimProgram(next) }
 }
 
+// The box only materialises a timer (currentFutureRecordings) shortly before an
+// episode airs, so a series set for tomorrow shows nothing there yet. Project
+// the next episodes from each series tag against the loaded guide and merge them
+// with the real timers, so the Upcoming view reflects what will actually record.
+// A projected entry is source:'series' (expected); a real timer is source:'timer'.
+export const projectUpcomingRecordings = ({ seriesTags = [], futureRecordings = [], guide, nowMs = Date.now() } = {}) => {
+  const timers = futureRecordings
+    .filter((r) => !r.pendingDelete)
+    .map((r) => ({
+      programId: r.programId,
+      name: r.name,
+      channelId: r.channelId,
+      channelName: r.channelName || null,
+      startDate: r.startDate,
+      endDate: r.endDate,
+      episodeTitle: r.episodeTitle || null,
+      seriesLinkId: r.seriesLinkId || null,
+      source: 'timer',
+    }))
+  const timerProgramIds = new Set(timers.map((t) => String(t.programId)))
+
+  const projected = []
+  if (guide?.channels?.length) {
+    const tagByLink = new Map()
+    for (const t of seriesTags) {
+      const link = t?.seriesLinkId ?? t?.id
+      if (link != null) tagByLink.set(String(link), t)
+    }
+    const seenEpisode = new Set()
+    for (const channel of guide.channels) {
+      const rows = [...(guide.programsByChannel?.[String(channel.epgId)] || [])]
+        .sort((a, b) => a.start - b.start)
+      for (const p of rows) {
+        if (p.start <= nowMs || p.series_link == null) continue
+        const tag = tagByLink.get(String(p.series_link))
+        if (!tag || String(tag.channelId) !== String(channel.id)) continue
+        if (timerProgramIds.has(String(p.program_id))) continue
+        if (p.series_no != null && p.episode_no != null) {
+          const key = `${p.series_link}|${p.series_no}x${p.episode_no}`
+          if (seenEpisode.has(key)) continue
+          seenEpisode.add(key)
+        }
+        projected.push({
+          programId: p.program_id,
+          name: p.title,
+          channelId: channel.id,
+          channelName: channel.name || null,
+          startDate: p.start,
+          endDate: p.end,
+          episodeTitle: p.episode_title || null,
+          seriesLinkId: p.series_link,
+          seriesNo: p.series_no ?? null,
+          episodeNo: p.episode_no ?? null,
+          source: 'series',
+        })
+      }
+    }
+  }
+
+  return [...timers, ...projected].sort((a, b) => a.startDate - b.startDate)
+}
+
 const trimProgram = (p) => p == null ? null : {
   program_id: p.program_id,
   epg_program_id: p.epg_program_id,
@@ -168,6 +230,13 @@ export const getRecordingState = async ({ fresh = false } = {}) => {
   const now = Date.now()
   if (!fresh && stateCache && stateCache.expiresAt > now) return stateCache.value
   const state = await getBoxState()
+  const guide = await getCachedGuide().catch(() => null)
+  const upcomingRecordings = projectUpcomingRecordings({
+    seriesTags: state.seriesTags,
+    futureRecordings: state.futureRecordings,
+    guide,
+    nowMs: now,
+  })
   const value = {
     standby: state.standby,
     storageInfo: state.storageInfo,
@@ -175,6 +244,7 @@ export const getRecordingState = async ({ fresh = false } = {}) => {
     maxConcurrentRecordings:
       state.sysInfo?.hardwareCapabilities?.tuner?.maximumRecordingCount ?? null,
     futureRecordings: state.futureRecordings,
+    upcomingRecordings,
     seriesTags: state.seriesTags,
     activeRecordingIds: state.activeRecordingIds,
     fetchedAt: now,
