@@ -2965,6 +2965,9 @@ const EpgView = {
             <p v-if="cellState(selected.program) === 'scheduled' || cellState(selected.program) === 'recording'" class="text-xs font-mono text-signal-blue-hi">
               {{ cellState(selected.program) === 'recording' ? 'Recording now on the box' : 'Scheduled to record on the box' }}{{ isSeriesScheduled(selected.program) ? ' (part of a series recording).' : ' (one-off recording).' }}
             </p>
+            <p v-else-if="cellState(selected.program) === 'series'" class="text-xs font-mono" style="color:#e2b03c">
+              A series tag records this show on the box.
+            </p>
             <div v-if="canRecord" class="grid grid-cols-2 gap-3">
               <div>
                 <label class="field-label">START EARLY</label>
@@ -3000,6 +3003,11 @@ const EpgView = {
                 <button v-else type="button" class="btn btn-sm btn-danger"
                   @click="isSeriesScheduled(selected.program) ? (cancelChoice = true) : cancelSelected()" :disabled="modalBusy">
                   {{ modalBusy ? '…' : '⨯ CANCEL RECORDING' }}
+                </button>
+              </template>
+              <template v-else-if="cellState(selected.program) === 'series'">
+                <button type="button" class="btn btn-sm btn-danger" @click="cancelSelectedSeries" :disabled="modalBusy">
+                  {{ modalBusy ? '…' : '⨯ CANCEL SERIES' }}
                 </button>
               </template>
               <template v-else-if="canRecord">
@@ -3473,7 +3481,7 @@ const EpgView = {
       try {
         await api('POST', '/api/epg/cancel-series', {
           program_id: rec?.programId ?? null,
-          series_link_id: rec?.seriesLinkId,
+          series_link_id: rec?.seriesLinkId ?? program.series_link,
         })
         flash({ msg: `Series recording cancelled.` })
         closeModal()
