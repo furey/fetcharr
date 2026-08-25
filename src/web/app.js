@@ -2757,8 +2757,9 @@ const EpgView = {
                     <span v-else-if="cellState(p) === 'series'" class="pill done">SERIES</span>
                   </span>
                 </div>
-                <p class="deck-card-meta">
-                  {{ p.channelName }} · {{ fmtDayTime(p.start) }}–{{ fmtClock(p.end) }}<template v-if="p.episode_title"> · {{ p.episode_title }}</template>
+                <p class="deck-card-meta flex items-center gap-1.5">
+                  <img v-if="channelById(p.channelId)?.logo" class="epg-rail-logo shrink-0" :src="'/api/epg/logo/' + p.channelId" alt="" loading="lazy" @error="$event.target.style.display = 'none'" />
+                  <span>{{ p.channelName }} · {{ fmtDayTime(p.start) }}–{{ fmtClock(p.end) }}<template v-if="p.episode_title"> · {{ p.episode_title }}</template></span>
                 </p>
               </article>
               <p v-if="!searching && searchResults.length === 0" class="text-ink-dim text-sm">Nothing upcoming matches.</p>
@@ -2909,8 +2910,9 @@ const EpgView = {
                       <span v-else class="pill downloading">SCHEDULED</span>
                     </span>
                   </div>
-                  <p class="deck-card-meta">
-                    {{ channelName(r.channelId) }} · {{ fmtDayTime(tsOf(r.startDate)) }}–{{ fmtClock(tsOf(r.endDate)) }}<template v-if="r.episodeTitle"> · {{ r.episodeTitle }}</template>
+                  <p class="deck-card-meta flex items-center gap-1.5">
+                    <img v-if="channelById(r.channelId)?.logo" class="epg-rail-logo shrink-0" :src="'/api/epg/logo/' + r.channelId" alt="" loading="lazy" @error="$event.target.style.display = 'none'" />
+                    <span>{{ channelName(r.channelId) }} · {{ fmtDayTime(tsOf(r.startDate)) }}–{{ fmtClock(tsOf(r.endDate)) }}<template v-if="r.episodeTitle"> · {{ r.episodeTitle }}</template></span>
                   </p>
                   <div class="flex items-center justify-end pt-1">
                     <button type="button" class="btn btn-sm btn-danger" @click="cancelUpcoming(r)"
@@ -2932,7 +2934,10 @@ const EpgView = {
                     <span class="deck-card-title">{{ t.name || t.title || seriesKey(t) }}</span>
                     <span class="pill done">SERIES</span>
                   </div>
-                  <p class="deck-card-meta">{{ channelName(t.channelId) }}<template v-if="t.episodesToKeep"> · keep {{ t.episodesToKeep }}</template></p>
+                  <p class="deck-card-meta flex items-center gap-1.5">
+                    <img v-if="channelById(t.channelId)?.logo" class="epg-rail-logo shrink-0" :src="'/api/epg/logo/' + t.channelId" alt="" loading="lazy" @error="$event.target.style.display = 'none'" />
+                    <span>{{ channelName(t.channelId) }}<template v-if="t.episodesToKeep"> · keep {{ t.episodesToKeep }}</template></span>
+                  </p>
                   <div class="flex items-center justify-end pt-1">
                     <button type="button" class="btn btn-sm btn-danger" @click="cancelSeriesTag(t)"
                       :disabled="busyId === seriesKey(t)">{{ busyId === seriesKey(t) ? '…' : '⨯ CANCEL SERIES' }}</button>
