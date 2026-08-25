@@ -34,8 +34,11 @@ Click a cell to open its detail: synopsis, rating, season and episode, and the c
 - **RECORD** schedules the single airing. `START EARLY` and `RUN LATE` pad the timer (3 and 5 minutes by default) so late-running broadcasts don't clip.
 - **RECORD SERIES** sets a series tag on the box, with an episodes-to-keep option.
 - A scheduled programme shows **CANCEL RECORDING** instead. If the episode belongs to a series recording, cancelling asks whether to cancel just that episode or the whole series.
+- A programme whose show carries a series tag but has no episode scheduled yet shows the tag with a **CANCEL SERIES** action.
 
 The **UPCOMING** view lists everything scheduled on the box with cancel buttons, each marked `SERIES` or `ONE-OFF`; **SERIES** lists the box's series tags.
+
+A series tag belongs to one channel. An SD channel and its HD simulcast are separate channels to Fetch, so the same show appears once per channel in search, and a series set on the HD channel does not cover the SD airings — the channel logos on each row show which is which.
 
 ## Pinned channels
 

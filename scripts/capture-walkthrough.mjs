@@ -126,6 +126,17 @@ const epgGuide = {
   channels: orderedEpgChannels, programs: epgPrograms,
 }
 
+const channelNameById = new Map(epgChannels.map((c) => [c.id, c.name]))
+const seriesLinkFor = (title) =>
+  epgFlat.find((p) => p.title === title && p.series_link)?.series_link ?? `sl-${title}`
+const epgSearch = {
+  results: epgFlat
+    .filter((p) => p.title === 'Grand Designs' && p.end > epgNowMs)
+    .sort((a, b) => a.start - b.start)
+    .slice(0, 8)
+    .map((p) => ({ ...p, channelName: channelNameById.get(p.channelId) || '' })),
+}
+
 const epgState = {
   standby: false,
   storageInfo: { freeSize: 240 },
@@ -137,8 +148,8 @@ const epgState = {
     seriesLinkId: p.series_link, pendingDelete: false,
   })),
   seriesTags: [
-    { id: 'sl-hq', seriesLinkId: 'sl-hq', name: 'Hard Quiz', channelId: 100, episodesToKeep: 0 },
-    { id: 'sl-gd', seriesLinkId: 'sl-gd', name: 'Grand Designs', channelId: 101, episodesToKeep: 5 },
+    { id: seriesLinkFor('Hard Quiz'), seriesLinkId: seriesLinkFor('Hard Quiz'), name: 'Hard Quiz', channelId: 100, episodesToKeep: 0 },
+    { id: seriesLinkFor('Grand Designs'), seriesLinkId: seriesLinkFor('Grand Designs'), name: 'Grand Designs', channelId: 101, episodesToKeep: 5 },
   ],
   activeRecordingIds: [],
   fetchedAt: epgNowMs,
@@ -172,7 +183,7 @@ const routes = [
   ['**/api/epg/guide**', epgGuide],
   ['**/api/epg/state**', epgState],
   ['**/api/epg/now', epgNow],
-  ['**/api/epg/search**', { results: [] }],
+  ['**/api/epg/search**', epgSearch],
   ['**/api/settings', settings],
   ['**/api/sync-status', { activeSyncId: null, cron: '0 3 * * *' }],
   ['**/api/syncs**', { syncs }],
@@ -317,6 +328,19 @@ const run = async () => {
     await page.mouse.move(scrollBox.x + scrollBox.width / 2, scrollBox.y + scrollBox.height / 2)
     await page.mouse.wheel(420, 0)
     await page.waitForTimeout(1400)
+  }
+  const searchInput = page.locator('input[placeholder^="Search"]')
+  const searchBox = await searchInput.boundingBox().catch(() => null)
+  if (searchBox) {
+    await cursorTo(page, Math.round(searchBox.x + searchBox.width / 2), Math.round(searchBox.y + searchBox.height / 2))
+    await page.evaluate(() => window.__wt?.click())
+    await searchInput.click()
+    await searchInput.pressSequentially('Grand Designs', { delay: 90 })
+    await page.waitForSelector('.deck-card', { timeout: 5000 }).catch(() => {})
+    await page.waitForTimeout(2600)
+    await searchInput.press('ControlOrMeta+a')
+    await searchInput.press('Delete')
+    await page.waitForTimeout(700)
   }
 
   await clickTab(page, 'shows')
