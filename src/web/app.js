@@ -436,8 +436,8 @@ const DashboardView = {
               <div class="flex-1 min-w-0">
                 <template v-if="e.now">
                   <span class="block truncate">
-                    <span class="text-sm font-semibold text-ink">{{ e.now.title }}</span>
-                    <span class="font-mono text-xs text-ink-dim"> · {{ onNowMeta(e.now) }}</span>
+                    <span class="text-sm font-semibold text-ink mr-3">{{ e.now.title }}</span>
+                    <span class="font-mono text-xs text-ink-dim">{{ onNowMeta(e.now) }}</span>
                   </span>
                   <div class="progress" style="margin-top: 0.25rem; max-width: none;">
                     <div class="progress-track">
@@ -448,7 +448,7 @@ const DashboardView = {
                 <span v-else class="text-sm text-ink-mute">off air</span>
               </div>
               <span v-if="e.next" class="hidden sm:block font-mono text-xs text-ink-dim min-w-0 max-w-[16rem] truncate">
-                next · {{ e.next.title }} · {{ fmtClockTz(e.next.start) }}
+                next: <span class="text-xs font-semibold font-sans text-ink">{{ e.next.title }}</span> {{ fmtClockTz(e.next.start) }}
               </span>
             </div>
             </div>
@@ -529,7 +529,7 @@ const DashboardView = {
 
     const onNowMeta = (p) => {
       const mins = Math.max(0, Math.ceil((p.end - Date.now()) / 60_000))
-      return `Started ${fmtClockTz(p.start)} · ${mins} min${mins === 1 ? '' : 's'} remaining`
+      return `${fmtClockTz(p.start)} · ${mins} min${mins === 1 ? '' : 's'} remaining`
     }
 
     const loadGuidePanel = async () => {
@@ -630,7 +630,7 @@ const ShowsView = {
     <div class="view-reveal space-y-6">
       <section class="panel">
         <header class="panel-header">
-          <span class="panel-title">SHOWS · {{ shows.length }}</span>
+          <span class="panel-title">TRACKED SHOWS · {{ shows.length }}</span>
           <span v-if="flashText" :class="['status-readout', flashKind]">{{ flashText }}</span>
         </header>
         <div class="panel-body">
@@ -715,14 +715,14 @@ const ShowsView = {
             </article>
           </div>
           <p v-else class="text-ink-dim text-sm">
-            No shows yet — add one below to start tracking a show.
+            No tracked shows yet — add one below to start tracking.
           </p>
         </div>
       </section>
 
       <section class="panel">
         <header class="panel-header">
-          <span class="panel-title">ADD SHOW</span>
+          <span class="panel-title">TRACK NEW SHOW</span>
         </header>
         <form class="panel-body" @submit.prevent="add">
           <div class="grid gap-4 md:grid-cols-2">
@@ -778,7 +778,7 @@ const ShowsView = {
           </div>
           <div class="flex items-center gap-3 mt-2">
             <button type="submit" class="btn btn-primary" :disabled="adding">
-              {{ adding ? 'ADDING…' : '＋ ADD SHOW' }}
+              {{ adding ? 'ADDING…' : '＋ TRACK SHOW' }}
             </button>
           </div>
         </form>
@@ -1137,7 +1137,7 @@ const RecordingsView = {
     <div class="view-reveal space-y-6">
       <section class="panel">
         <header class="panel-header">
-          <span class="panel-title">RECORDINGS · {{ rangeLabel }} of {{ total }}</span>
+          <span class="panel-title">TRACKED RECORDINGS · {{ rangeLabel }} of {{ total }}</span>
           <div class="flex flex-wrap items-center gap-3">
             <span v-if="flashText" :class="['status-readout', flashKind]">{{ flashText }}</span>
             <button type="button" class="btn btn-sm btn-danger" @click="purgeDeleted"
