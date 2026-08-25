@@ -1,7 +1,7 @@
 ---
 title: Reference
 description: >-
-  The technical companion to the guide — how Fetcharr works under the hood, and
+  The technical companion to the guide; how Fetcharr works under the hood, and
   why it works that way.
 ---
 

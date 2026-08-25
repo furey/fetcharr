@@ -209,6 +209,317 @@ export const testConnection = async ({ activationCode, pin, persist = true } = {
   return { ok: true, terminals, terminalIdDetected, persisted }
 }
 
+// EPG REST endpoints share the auth cookie with the WebSocket relay. Sessions
+// are cached briefly so a guide page render (channels + several program blocks)
+// costs one authenticate, not one per request.
+export const fetchEpgChannels = async () => {
+  const body = await epgGet(URL_EPG_CHANNELS, {})
+  return {
+    channels: body?.channels || {},
+    regionDetails: body?.region_details || {},
+  }
+}
+
+// Guide data comes in 4-hour blocks indexed from the epoch (block = seconds/14400).
+// startMs picks the first block; blockCount extends the window (6 blocks = 24h).
+export const fetchEpgPrograms = async ({ channelIds, startMs, blockCount = 6 } = {}) => {
+  const ids = (channelIds || []).map(Number).filter(Number.isFinite)
+  if (ids.length === 0) {
+    throw new FetchCloudError('No channelIds provided.', { stage: 'epg', code: 'no-channels' })
+  }
+  const block = Math.floor(startMs / 1000 / EPG_BLOCK_SECONDS)
+  const body = await epgGet(URL_EPG_PROGRAMS, {
+    channel_ids: ids.join(','),
+    block: `4-${block}`,
+    count: String(blockCount),
+    extended: '1',
+    off_air_catchup: '0',
+    include_catchup: '0',
+  })
+  return parseEpgProgramsResponse(body)
+}
+
+// The programslist response is column-oriented: per-channel arrays of positional
+// program tuples, named by __meta__.program_fields, with synopses in a side map.
+// Two field schemas exist on the wire: the pyfetchtv-era one
+// (program_id, …, epg_program_id) and the current one where the airing id is
+// named `id` and the programme id is named `program_id`. Both normalise to
+// program_id = airing id (RECORD_PROGRAM's programId) and epg_program_id =
+// programme id (RECORD_PROGRAM's epgProgramId).
+export const parseEpgProgramsResponse = (body) => {
+  const fields = body?.__meta__?.program_fields || []
+  const fieldSet = new Set(fields)
+  const renamedSchema = !fieldSet.has('epg_program_id')
+    && fieldSet.has('id') && fieldSet.has('program_id')
+  const synopses = body?.synopses || {}
+  const programsByChannel = {}
+  for (const [epgId, rows] of Object.entries(body?.channels || {})) {
+    programsByChannel[epgId] = (rows || []).map((row) => {
+      const program = {}
+      fields.forEach((name, i) => { program[name] = row[i] })
+      if (renamedSchema) {
+        program.epg_program_id = program.program_id
+        program.program_id = program.id
+      }
+      if (program.synopsis_id != null) {
+        program.synopsis = synopses[program.synopsis_id] || ''
+      }
+      return program
+    })
+  }
+  return { programsByChannel }
+}
+
+// Full I_AM_ALIVE state dump: channel lineup, stored + scheduled recordings,
+// series tags, active recordings, storage, and box hardware info.
+export const getBoxState = async ({ activationCode, pin, terminalId } = {}) =>
+  withCloudWs({ activationCode, pin, terminalId }, async ({ ws, tid }) => {
+    const { data } = await fetchLibraryWithRetry(ws, tid)
+    return {
+      sysInfo: data?.sysInfo || {},
+      standby: Boolean(data?.standby),
+      storageInfo: data?.storageInfo || {},
+      dvbChannels: data?.dvbChannels || [],
+      recordings: data?.recordings || [],
+      futureRecordings: data?.currentFutureRecordings || [],
+      seriesTags: data?.seriesTagList || [],
+      activeRecordingIds: data?.activeRecordings || [],
+    }
+  })
+
+export const scheduleRecording = async ({
+  channelId,
+  programId,
+  epgProgramId,
+  leadTime = DEFAULT_LEAD_MINUTES,
+  lagTime = DEFAULT_LAG_MINUTES,
+  ...creds
+} = {}) =>
+  sendRecordingCommand({
+    ...creds,
+    type: 'RECORD_PROGRAM',
+    values: { channelId, programId, epgProgramId, leadTime, lagTime, protected: false },
+    successEvents: ['RECORD_PROGRAM_SUCCESS', 'RECORD_PROGRAM_START'],
+    matchProgramId: programId,
+  })
+
+export const cancelRecording = async ({ programId, ...creds } = {}) =>
+  sendRecordingCommand({
+    ...creds,
+    type: 'RECORD_PROGRAM_CANCEL',
+    values: { programId },
+    successEvents: ['RECORD_PROGRAM_CANCEL'],
+    matchProgramId: programId,
+  })
+
+export const enableSeriesTag = async ({
+  seriesLink,
+  channelId,
+  epgProgramId,
+  programId,
+  leadTime = DEFAULT_LEAD_MINUTES,
+  lagTime = DEFAULT_LAG_MINUTES,
+  episodesToKeep = 0,
+  seasonsVal = 1,
+  ...creds
+} = {}) =>
+  sendRecordingCommand({
+    ...creds,
+    type: 'ENABLE_SERIES_TAG',
+    values: {
+      seriesLink, channelId, epgProgramId, programId,
+      leadTime, lagTime, episodesToKeep, seasonsVal,
+    },
+    successEvents: ['SERIES_TAG_SET'],
+  })
+
+export const disableSeriesTag = async ({ programId, seriesLinkId, ...creds } = {}) =>
+  sendRecordingCommand({
+    ...creds,
+    type: 'DISABLE_SERIES_TAG',
+    values: { programId, seriesLinkId },
+    successEvents: ['SERIES_TAG_CANCELLED'],
+    matchSeriesLinkId: seriesLinkId,
+  })
+
+// Schedule/cancel acks do not echo the request type — they arrive as a
+// RECORDINGS_UPDATE event stream. Match on eventName (and programId when the
+// update carries one); RECORD_PROGRAM_FAILURE and ERR_CONCURRENCY_LIMIT reject.
+export const matchRecordingUpdate = ({ parsed, successEvents, matchProgramId, matchSeriesLinkId }) => {
+  const inner = parsed?.message
+  if (inner?.type === 'RECORD_PROGRAM_FAILURE') {
+    return { error: 'Box reported RECORD_PROGRAM_FAILURE.', code: 'record-failure' }
+  }
+  if (inner?.type === 'ERR_CONCURRENCY_LIMIT') {
+    return { error: 'Box refused: tuner/recording concurrency limit.', code: 'concurrency-limit' }
+  }
+  if (inner?.type !== 'RECORDINGS_UPDATE') return null
+  const updates = inner?.data?.recordingUpdates || []
+  const hit = updates.find((u) => {
+    if (!successEvents.includes(u?.eventName)) return false
+    if (matchProgramId != null) {
+      const pid = u?.recording?.programId
+      if (pid != null && String(pid) !== String(matchProgramId)) return false
+    }
+    if (matchSeriesLinkId != null) {
+      const sid = u?.seriesTag?.id ?? u?.seriesTag?.seriesLinkId
+      if (sid != null && String(sid) !== String(matchSeriesLinkId)) return false
+    }
+    return true
+  })
+  if (!hit) return null
+  return { ok: true, eventName: hit.eventName, recording: hit.recording || null, seriesTag: hit.seriesTag || null }
+}
+
+const sendRecordingCommand = async ({
+  type,
+  values,
+  successEvents,
+  matchProgramId,
+  matchSeriesLinkId,
+  activationCode,
+  pin,
+  terminalId,
+}) =>
+  withCloudWs({ activationCode, pin, terminalId }, async ({ ws, tid }) => {
+    // Wake the box's cloud session first — requiresSetTopBox commands are
+    // dropped silently when it is asleep (same failure mode as delete).
+    await fetchLibraryWithRetry(ws, tid)
+    const envelope = buildEnvelope({ terminalId: tid, type, values })
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        ws.removeListener('message', onMessage)
+        reject(new FetchCloudError(
+          `Timed out waiting for ${type} confirmation.`,
+          { stage: 'ack', code: 'timeout' },
+        ))
+      }, COMMAND_ACK_TIMEOUT_MS)
+      const onMessage = (raw) => {
+        let parsed
+        try { parsed = JSON.parse(raw.toString()) } catch { return }
+        const result = matchRecordingUpdate({ parsed, successEvents, matchProgramId, matchSeriesLinkId })
+        if (!result) return
+        clearTimeout(timer)
+        ws.removeListener('message', onMessage)
+        if (result.error) {
+          reject(new FetchCloudError(result.error, { stage: 'ack', code: result.code }))
+        } else {
+          resolve(result)
+        }
+      }
+      ws.on('message', onMessage)
+      ws.send(JSON.stringify(envelope), (err) => {
+        if (err) {
+          clearTimeout(timer)
+          ws.removeListener('message', onMessage)
+          reject(new FetchCloudError(
+            `Failed to send ${type}: ${err.message}`,
+            { stage: 'send', code: err.code },
+          ))
+        }
+      })
+    })
+  })
+
+const withCloudWs = async ({ activationCode, pin, terminalId }, fn) => {
+  const creds = await getCreds({ activationCode, pin })
+  const tid = terminalId ?? (await getSetting('fetch_cloud_terminal_id'))
+  if (!tid) {
+    throw new FetchCloudError(
+      'No terminal_id configured. Run Test connection first.',
+      { stage: 'send', code: 'no-terminal' },
+    )
+  }
+  const { authCookie } = await getCachedSession(creds)
+  const ws = await openCloudWs({ authCookie })
+  try {
+    return await fn({ ws, tid })
+  } finally {
+    closeCloudWs(ws)
+  }
+}
+
+// Fetch's cloud API rate limits with plain 429s. Honour any Retry-After /
+// RateLimit-Reset hint it sends, fall back to a fixed cooldown otherwise, and
+// short-circuit further requests (no network call) until the cooldown lifts.
+let epgRateLimitedUntil = 0
+
+export const rateLimitDelayMs = (headers) => {
+  const retryAfter = Number(headers?.['retry-after'])
+  if (Number.isFinite(retryAfter) && retryAfter > 0) return retryAfter * 1000
+  for (const key of ['x-ratelimit-reset', 'ratelimit-reset', 'x-rate-limit-reset']) {
+    const v = Number(headers?.[key])
+    if (!Number.isFinite(v) || v <= 0) continue
+    return v > 1e9 ? Math.max(v * 1000 - Date.now(), 1000) : v * 1000
+  }
+  return EPG_RATE_LIMIT_FALLBACK_MS
+}
+
+const epgGet = async (url, params) => {
+  if (Date.now() < epgRateLimitedUntil) {
+    const wait = Math.ceil((epgRateLimitedUntil - Date.now()) / 1000)
+    throw new FetchCloudError(
+      `Fetch cloud is rate limiting EPG requests — retry in ${wait}s.`,
+      { stage: 'epg', status: 429, code: 'rate-limited' },
+    )
+  }
+  const creds = await getCreds()
+  const { authCookie } = await getCachedSession(creds)
+  let res
+  try {
+    res = await axios.get(url, {
+      params,
+      headers: { ...STANDARD_HEADERS, Cookie: authCookie },
+      timeout: EPG_TIMEOUT_MS,
+      validateStatus: () => true,
+    })
+  } catch (err) {
+    throw new FetchCloudError(
+      `EPG request failed: ${err.code || err.message}`,
+      { stage: 'epg', code: err.code },
+    )
+  }
+  if (res.status === 401 || res.status === 403) {
+    invalidateCachedSession()
+    throw new FetchCloudError(`EPG auth rejected (HTTP ${res.status}).`, { stage: 'epg', status: res.status })
+  }
+  if (res.status === 429) {
+    const delay = rateLimitDelayMs(res.headers)
+    epgRateLimitedUntil = Date.now() + delay
+    const hints = ['retry-after', 'x-ratelimit-reset', 'ratelimit-reset', 'x-ratelimit-limit', 'x-ratelimit-remaining']
+      .map((k) => (res.headers?.[k] != null ? `${k}=${res.headers[k]}` : null))
+      .filter(Boolean)
+      .join(' ')
+    console.warn(`[fetch-cloud] EPG 429 — cooling down ${Math.ceil(delay / 1000)}s${hints ? ` (${hints})` : ' (no rate-limit headers)'}`)
+    throw new FetchCloudError(
+      `Fetch cloud is rate limiting EPG requests — retry in ${Math.ceil(delay / 1000)}s.`,
+      { stage: 'epg', status: 429, code: 'rate-limited' },
+    )
+  }
+  if (res.status >= 400) {
+    throw new FetchCloudError(`EPG HTTP ${res.status}`, { stage: 'epg', status: res.status })
+  }
+  const metaError = res.data?.__meta__?.error
+  if (metaError) {
+    throw new FetchCloudError(`EPG error: ${metaError}`, { stage: 'epg', code: 'meta-error' })
+  }
+  return res.data
+}
+
+let cachedSession = null
+
+const getCachedSession = async (creds) => {
+  const key = `${creds.activationCode}:${creds.pin}`
+  if (cachedSession && cachedSession.key === key && cachedSession.expiresAt > Date.now()) {
+    return cachedSession
+  }
+  const { authCookie, terminals } = await authenticate(creds)
+  cachedSession = { key, authCookie, terminals, expiresAt: Date.now() + SESSION_TTL_MS }
+  return cachedSession
+}
+
+const invalidateCachedSession = () => { cachedSession = null }
+
 const sendDeleteAndAwaitAck = ({ ws, terminalId, cloudIds, inputDlnaIds, unmappedDlnaIds }) => {
   const envelope = buildEnvelope({
     terminalId,
@@ -311,10 +622,26 @@ const fetchLibraryWithRetry = async (ws, terminalId) => {
       }
       console.warn(
         `[fetch-cloud] I_AM_ALIVE attempt ${attempt}/${HANDSHAKE_ATTEMPTS} timed out`
-          + ` after ${ARE_YOU_ALIVE_TIMEOUT_MS}ms; resending ARE_YOU_ALIVE`,
+          + ` after ${ARE_YOU_ALIVE_TIMEOUT_MS}ms; sending WAKE_STB and resending ARE_YOU_ALIVE`,
       )
+      sendWakeStb(ws, terminalId)
     }
   }
+}
+
+// WAKE_STB exists in the wire protocol (pyfetchtv names the command but never
+// sends it); the Fetch mobile app wakes a sleeping cloud session the same way
+// on open. Fire-and-forget between handshake attempts — a box that is already
+// awake ignores it.
+const sendWakeStb = (ws, terminalId) => {
+  const envelope = buildEnvelope({
+    terminalId,
+    type: 'WAKE_STB',
+    isQueueable: true,
+    requiresSetTopBox: false,
+    onlyPairedSetTopBox: true,
+  })
+  try { ws.send(JSON.stringify(envelope), () => {}) } catch { /* best effort */ }
 }
 
 // Sends ARE_YOU_ALIVE and waits for I_AM_ALIVE, which carries the recording
@@ -333,15 +660,22 @@ const fetchLibraryViaHandshake = (ws, terminalId) =>
     const onMessage = (raw) => {
       let parsed
       try { parsed = JSON.parse(raw.toString()) } catch { return }
-      if (parsed?.message?.type !== 'I_AM_ALIVE') return
+      if (parsed?.message?.type !== 'I_AM_ALIVE') {
+        const type = parsed?.message?.type
+        if (type && type !== 'PONG') {
+          console.warn(`[fetch-cloud] handshake: inbound ${type}${type === 'COMMAND_ERROR' ? ` — ${JSON.stringify(parsed.message?.data ?? {}).slice(0, 300)}` : ''}`)
+        }
+        return
+      }
       clearTimeout(timer)
       ws.removeListener('message', onMessage)
-      const recordings = parsed.message?.data?.recordings || []
+      const data = parsed.message?.data || {}
+      const recordings = data.recordings || []
       const mapByDlnaId = new Map()
       for (const r of recordings) {
         if (r?.dlnaId != null && r?.id != null) mapByDlnaId.set(String(r.dlnaId), r.id)
       }
-      resolve({ recordings, mapByDlnaId })
+      resolve({ recordings, mapByDlnaId, data })
     }
 
     ws.on('message', onMessage)
@@ -410,6 +744,8 @@ const getCreds = async (overrides = {}) => {
 
 const URL_AUTHENTICATE = 'https://apis.fetchtv.com.au/v3/authenticate'
 const URL_MESSAGES = 'wss://messages.fetchtv.com.au/v2/message/ws/messages'
+const URL_EPG_CHANNELS = 'https://apis.fetchtv.com.au/v2/epg/channels'
+const URL_EPG_PROGRAMS = 'https://apis.fetchtv.com.au/v2/epg/programslist'
 
 // Sent by the Android Fetch app. X-FTV-Capabilities required for the box to accept
 // the auth POST; the other X-FTV-* headers mirror pyfetchtv for behavioural compat.
@@ -424,5 +760,12 @@ const STANDARD_HEADERS = {
 const WS_OPEN_TIMEOUT_MS = 8000
 const AUTH_TIMEOUT_MS = 10000
 const ARE_YOU_ALIVE_TIMEOUT_MS = 10000
-const HANDSHAKE_ATTEMPTS = 2
+const HANDSHAKE_ATTEMPTS = 3
 const DELETE_ACK_TIMEOUT_MS = 15000
+const COMMAND_ACK_TIMEOUT_MS = 15000
+const EPG_TIMEOUT_MS = 15000
+const EPG_RATE_LIMIT_FALLBACK_MS = 60_000
+const EPG_BLOCK_SECONDS = 14400
+const SESSION_TTL_MS = 5 * 60 * 1000
+const DEFAULT_LEAD_MINUTES = 3
+const DEFAULT_LAG_MINUTES = 5

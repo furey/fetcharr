@@ -1,13 +1,13 @@
 ---
 title: Troubleshooting
-description: Fixes for the common snags — discovery, Plex, downloads, deletes, ad detection.
+description: 'Fixes for the common snags: discovery, Plex, downloads, deletes, ad detection.'
 ---
 
 # Troubleshooting
 
 ## Auto-discover can't find the Fetch box
 
-- The container has to run with host networking (the example compose already does this). Fetcharr finds the box by listening for the announcement it broadcasts on your network (a protocol called SSDP), and those broadcasts don't reach across Docker's own private network, so the container has to share the host's network to hear them.
+- The container has to run with host networking (the example compose already does this). Fetcharr finds the box by listening for the announcement it broadcasts on your network (a protocol called SSDP). Those broadcasts don't reach across Docker's own private network, so the container has to share the host's network to hear them.
 - The host has to be on the same part of the network as the box; those broadcasts don't cross between subnets without extra setup.
 - You can always enter the box's IP and port manually in Settings instead.
 
@@ -28,7 +28,7 @@ description: Fixes for the common snags — discovery, Plex, downloads, deletes,
 
 Symptoms: "No I_AM_ALIVE reply" or "Timed out waiting for I_AM_ALIVE handshake".
 
-- The reply comes from your Fetch box via Fetch's cloud, and a box whose cloud session has dozed off misses the ping even though it works fine on the LAN. Fetcharr pings twice (20 s) before giving up, and the first attempt usually wakes the box's session, so just retry the delete after a moment.
+- The reply comes from your Fetch box via Fetch's cloud, and a box whose cloud session has dozed off misses the ping even though it works fine on the LAN. Fetcharr pings three times over 30 s and sends a wake command between attempts. That usually revives a dozing session, so retry after a moment.
 - If it keeps failing, open the official Fetch mobile app: if the app can't see the box either, the box↔cloud link is down; restarting the box resets it. See [Delete from Fetch](/guide/delete-from-fetch) and the [deep dive](/deep-dive#why-delete-from-fetch-goes-through-the-cloud-not-lan).
 
 ## Other containers can't reach Fetcharr by name

@@ -2,7 +2,7 @@
 title: Following shows
 description: >-
   Mark Fetch shows to follow, match them to library folders, and set where
-  episodes land.
+  episodes are saved.
 ---
 
 # Following shows
@@ -17,7 +17,7 @@ The first time you open the Shows tab with a Fetch box set up, it runs Refresh S
 
 ## Season template
 
-Each show has a season-folder template that decides where episodes land: `{season}`, `{season_padded}` (zero-padded, `01`), or `{season_unpadded}` (`1`). Fetcharr writes to `<media_root>/<dest_folder>/<season>/…`, and it rejects any template that would point outside your media root, so a follow can only ever write inside your library.
+Each show has a season-folder template that decides where episodes are saved: `{season}`, `{season_padded}` (zero-padded, `01`), or `{season_unpadded}` (`1`). Fetcharr writes to `<media_root>/<dest_folder>/<season>/…`, and it rejects any template that would point outside your media root, so a follow can only ever write inside your library.
 
 ## Enable, sync, remove
 

@@ -64,6 +64,7 @@ export default withMermaid(defineConfig({
         text: 'Using Fetcharr',
         collapsed: false,
         items: [
+          { text: 'TV Guide', link: '/guide/tv-guide' },
           { text: 'Following shows', link: '/guide/following-shows' },
           { text: 'Recordings', link: '/guide/recordings' },
           { text: 'Syncs', link: '/guide/syncs' },
