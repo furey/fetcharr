@@ -2963,6 +2963,7 @@ const EpgView = {
       </section>
 
       <teleport to="body">
+      <transition name="epg-sheet">
       <div v-if="selected" class="epg-modal-backdrop" @click.self="closeModal">
         <section class="panel epg-modal">
           <header class="panel-header">
@@ -3047,10 +3048,11 @@ const EpgView = {
           </div>
         </section>
       </div>
-
+      </transition>
       </teleport>
 
       <teleport to="body">
+      <transition name="epg-sheet">
       <div v-if="channelsModal" class="epg-modal-backdrop" @click.self="channelsModal = false">
         <section class="panel epg-modal">
           <header class="panel-header">
@@ -3123,6 +3125,7 @@ const EpgView = {
           </div>
         </section>
       </div>
+      </transition>
       </teleport>
     </div>
   `,

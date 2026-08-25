@@ -1113,6 +1113,30 @@ body.epg-drag-lock * {
   overflow-y: auto;
 }
 
+.epg-sheet-enter-active,
+.epg-sheet-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.epg-sheet-enter-active .epg-modal,
+.epg-sheet-leave-active .epg-modal {
+  transition: transform 0.3s cubic-bezier(0.32, 0.72, 0.33, 1);
+}
+
+.epg-sheet-enter-from,
+.epg-sheet-leave-to {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .epg-sheet-enter-active,
+  .epg-sheet-leave-active,
+  .epg-sheet-enter-active .epg-modal,
+  .epg-sheet-leave-active .epg-modal {
+    transition-duration: 0.01s;
+  }
+}
+
 @media (max-width: 767px) {
   .epg-scroll {
     max-height: 65vh;
@@ -1145,6 +1169,11 @@ body.epg-drag-lock * {
     border-bottom-left-radius: 0;
     border-bottom-right-radius: 0;
     padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .epg-sheet-enter-from .epg-modal,
+  .epg-sheet-leave-to .epg-modal {
+    transform: translateY(100%);
   }
 }
 
