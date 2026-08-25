@@ -25,6 +25,16 @@ import {
   FetchCloudError,
 } from './fetch-cloud.js'
 import {
+  getGuideDay,
+  searchGuide,
+  getRecordingState,
+  getChannelLogo,
+  recordProgram,
+  cancelProgram,
+  recordSeries,
+  cancelSeries,
+} from './epg.js'
+import {
   startManualAdScan,
   comskipIniOverrideExists,
   resetInterruptedScans,
@@ -349,6 +359,136 @@ app.get('/api/recordings', async (req, res) => {
     page,
     pageSize,
   })
+})
+
+const epgLimiter = rateLimit({
+  windowMs: 60_000,
+  limit: 20,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+})
+
+const epgError = (res, err, context) => {
+  const stage = err instanceof FetchCloudError ? err.stage : 'unknown'
+  const code = err instanceof FetchCloudError ? err.code : undefined
+  console.error(`[epg] ${context} failed (stage ${stage}): ${err.message}`)
+  res.status(502).json({ ok: false, error: err.message, stage, code })
+}
+
+app.get('/api/epg/guide', async (req, res) => {
+  const day = Number(req.query.day ?? 0)
+  if (!Number.isInteger(day) || day < 0 || day > 6) {
+    return res.status(400).json({ error: 'day must be an integer 0–6' })
+  }
+  try {
+    res.json(await getGuideDay({ day }))
+  } catch (err) {
+    epgError(res, err, 'guide')
+  }
+})
+
+app.get('/api/epg/search', async (req, res) => {
+  try {
+    res.json(await searchGuide({ q: String(req.query.q || '') }))
+  } catch (err) {
+    epgError(res, err, 'search')
+  }
+})
+
+app.get('/api/epg/state', async (req, res) => {
+  try {
+    res.json(await getRecordingState({ fresh: req.query.fresh === '1' }))
+  } catch (err) {
+    epgError(res, err, 'state')
+  }
+})
+
+app.get('/api/epg/logo/:channelId', async (req, res) => {
+  try {
+    const logo = await getChannelLogo({ channelId: req.params.channelId })
+    if (!logo) return res.status(404).end()
+    res.setHeader('Content-Type', logo.contentType)
+    res.setHeader('Cache-Control', 'public, max-age=86400')
+    res.send(logo.body)
+  } catch {
+    res.status(404).end()
+  }
+})
+
+app.post('/api/epg/record', epgLimiter, doubleCsrfProtection, async (req, res) => {
+  const { channel_id, program_id, epg_program_id, lead_time, lag_time } = req.body || {}
+  if (channel_id == null || program_id == null || epg_program_id == null) {
+    return res.status(400).json({ error: 'channel_id, program_id and epg_program_id are required' })
+  }
+  try {
+    const result = await recordProgram({
+      channelId: channel_id,
+      programId: program_id,
+      epgProgramId: epg_program_id,
+      ...(lead_time != null ? { leadTime: Number(lead_time) } : {}),
+      ...(lag_time != null ? { lagTime: Number(lag_time) } : {}),
+    })
+    res.json({ ok: true, ...result })
+  } catch (err) {
+    epgError(res, err, 'record')
+  }
+})
+
+app.post('/api/epg/cancel', epgLimiter, doubleCsrfProtection, async (req, res) => {
+  const { program_id } = req.body || {}
+  if (program_id == null) return res.status(400).json({ error: 'program_id is required' })
+  try {
+    res.json({ ok: true, ...(await cancelProgram({ programId: program_id })) })
+  } catch (err) {
+    epgError(res, err, 'cancel')
+  }
+})
+
+app.post('/api/epg/record-series', epgLimiter, doubleCsrfProtection, async (req, res) => {
+  const {
+    series_link, channel_id, epg_program_id, program_id,
+    lead_time, lag_time, episodes_to_keep, seasons_val,
+  } = req.body || {}
+  if (series_link == null || channel_id == null || program_id == null || epg_program_id == null) {
+    return res.status(400).json({
+      error: 'series_link, channel_id, program_id and epg_program_id are required',
+    })
+  }
+  try {
+    const result = await recordSeries({
+      seriesLink: series_link,
+      channelId: channel_id,
+      epgProgramId: epg_program_id,
+      programId: program_id,
+      ...(lead_time != null ? { leadTime: Number(lead_time) } : {}),
+      ...(lag_time != null ? { lagTime: Number(lag_time) } : {}),
+      ...(episodes_to_keep != null ? { episodesToKeep: Number(episodes_to_keep) } : {}),
+      ...(seasons_val != null ? { seasonsVal: Number(seasons_val) } : {}),
+    })
+    res.json({ ok: true, ...result })
+  } catch (err) {
+    epgError(res, err, 'record-series')
+  }
+})
+
+app.post('/api/epg/cancel-series', epgLimiter, doubleCsrfProtection, async (req, res) => {
+  const { program_id, series_link_id } = req.body || {}
+  if (series_link_id == null) return res.status(400).json({ error: 'series_link_id is required' })
+  try {
+    res.json({
+      ok: true,
+      ...(await cancelSeries({ programId: program_id, seriesLinkId: series_link_id })),
+    })
+  } catch (err) {
+    epgError(res, err, 'cancel-series')
+  }
+})
+
+app.put('/api/epg/hidden-channels', doubleCsrfProtection, async (req, res) => {
+  const ids = req.body?.channel_ids
+  if (!Array.isArray(ids)) return res.status(400).json({ error: 'channel_ids must be an array' })
+  await setSetting('epg_hidden_channels', JSON.stringify(ids.map(String)))
+  res.json({ ok: true, hidden: ids.length })
 })
 
 app.get('/api/shows', async (req, res) => {
