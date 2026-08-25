@@ -2785,7 +2785,7 @@ const EpgView = {
                   <button type="button" class="btn btn-sm" @click="jumpTonight">TONIGHT</button>
                 </div>
               </div>
-              <button type="button" class="btn btn-sm md:ml-auto" @click="openChannelsModal" :disabled="!guide">CHANNELS</button>
+              <button type="button" class="btn btn-sm md:ml-auto" @click="openChannelsModal" :disabled="!guide">⚙︎ CHANNELS</button>
             </div>
             <p v-if="stateLine" class="text-xs font-mono text-ink-mute">{{ stateLine }}</p>
             <p v-if="guide?.stale" class="text-xs font-mono text-plex-yellow">
@@ -2940,7 +2940,11 @@ const EpgView = {
               <p v-if="seriesTags.length === 0" class="text-ink-dim text-sm">No series recordings set on the box.</p>
               <p v-else-if="seriesTagsFiltered.length === 0" class="text-ink-dim text-sm">No series match “{{ searchQ.trim() }}”.</p>
               <div v-else class="space-y-3">
-                <article v-for="t in seriesTagsFiltered" :key="seriesKey(t)" class="deck-card space-y-1.5">
+                <article v-for="t in seriesTagsFiltered" :key="seriesKey(t)"
+                  class="deck-card deck-card-clickable space-y-1.5" role="button" tabindex="0"
+                  @click="openSeriesTag(t)"
+                  @keydown.enter.prevent="openSeriesTag(t)"
+                  @keydown.space.prevent="openSeriesTag(t)">
                   <div class="flex items-start justify-between gap-3">
                     <span class="deck-card-title">{{ t.name || t.title || seriesKey(t) }}</span>
                     <span class="pill done">SERIES</span>
@@ -2949,13 +2953,6 @@ const EpgView = {
                     <img v-if="channelById(t.channelId)?.logo" class="epg-rail-logo shrink-0" :src="'/api/epg/logo/' + t.channelId" alt="" loading="lazy" @error="$event.target.style.display = 'none'" />
                     <span>{{ channelName(t.channelId) }}<template v-if="t.episodesToKeep"> · keep {{ t.episodesToKeep }}</template></span>
                   </p>
-                  <div class="flex items-center justify-end pt-1">
-                    <button type="button" class="btn btn-sm btn-danger" :class="{ 'is-busy': busyId === seriesKey(t) }" @click="cancelSeriesTag(t)"
-                      :disabled="busyId === seriesKey(t)">
-                      <span class="btn-label">⨯ CANCEL SERIES</span>
-                      <span v-if="busyId === seriesKey(t)" class="spinner spinner-overlay"></span>
-                    </button>
-                  </div>
                 </article>
               </div>
             </template>
@@ -2974,8 +2971,8 @@ const EpgView = {
             <img v-if="modalChannel?.thumb" class="epg-modal-art" :src="'/api/epg/artwork/' + modalChannel.id"
               alt="" @error="$event.target.style.display = 'none'" />
             <p class="text-sm font-mono text-ink-dim">
-              {{ selected.channel?.name || channelName(selected.program.channelId) }} ·
-              {{ fmtDayTime(selected.program.start) }}–{{ fmtClock(selected.program.end) }}
+              {{ selected.channel?.name || channelName(selected.program.channelId) }}<template v-if="selected.program.start"> ·
+              {{ fmtDayTime(selected.program.start) }}–{{ fmtClock(selected.program.end) }}</template>
               <template v-if="ratingLabel(selected.program)"> · {{ ratingLabel(selected.program) }}</template>
               <template v-if="seLabel(selected.program)"> · {{ seLabel(selected.program) }}</template>
             </p>
@@ -3462,6 +3459,22 @@ const EpgView = {
       selected.value = { program: p, channel }
     }
 
+    const openSeriesTag = (t) => {
+      const link = seriesKey(t)
+      const next = upcoming.value.find((r) => String(r.seriesLinkId) === link)
+      if (next) return openUpcoming(next)
+      openProgram({
+        program_id: null,
+        epg_program_id: null,
+        title: t.name || t.title || link,
+        episode_title: null,
+        start: null,
+        end: null,
+        series_link: link,
+        channelId: t.channelId,
+      }, channelById(t.channelId))
+    }
+
     const openUpcoming = (r) => {
       openProgram({
         program_id: r.programId,
@@ -3893,7 +3906,7 @@ const EpgView = {
       leadTime, lagTime, episodesToKeep,
       leadOptions: EPG_LEAD_OPTIONS, lagOptions: EPG_LAG_OPTIONS, keepOptions: EPG_KEEP_OPTIONS,
       recordSelected, recordSelectedSeries, cancelSelected, cancelSelectedSeries, cancelChoice,
-      upcoming, seriesTags, seriesKey, cancelUpcoming, cancelSeriesTag,
+      upcoming, seriesTags, seriesKey, cancelUpcoming, cancelSeriesTag, openSeriesTag,
       isActiveRecording: (r) => activeRecordingSet.value.has(String(r.id)),
       busyId, channelsModal, openChannelsModal, hiddenDraft, toggleHidden,
       pinnedDraft, sortDraft, sortOptions, savingPrefs, saveChannelPrefs,
