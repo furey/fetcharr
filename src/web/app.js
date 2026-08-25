@@ -2684,7 +2684,11 @@ const WelcomeView = {
 }
 
 const EPG_PX_PER_MIN = 3
-const EPG_RAIL_PX = 148
+const EPG_RAIL_DEFAULT_PX = 148
+const EPG_RAIL_MIN_PX = 90
+const EPG_RAIL_MAX_PX = 260
+const EPG_RAIL_KEY = 'fetcharr.epgRailPx'
+const EPG_DRAG_THRESHOLD_PX = 6
 const EPG_DAY_MIN = 24 * 60
 const EPG_STATE_POLL_MS = 60_000
 const EPG_SEARCH_DEBOUNCE_MS = 300
@@ -2806,25 +2810,32 @@ const EpgView = {
             <div v-else-if="guide" class="epg-scroll" ref="scrollEl">
               <div class="epg-canvas" :style="{ width: canvasWidth + 'px' }">
                 <div class="epg-ruler">
-                  <div class="epg-ruler-corner" :style="{ width: railPx + 'px' }"></div>
+                  <div class="epg-ruler-corner" :style="{ width: railPx + 'px' }">
+                    <div class="epg-rail-resizer" title="Drag to resize the channel rail"
+                      @pointerdown="onRailResizeDown"
+                      @pointermove="onRailResizeMove"
+                      @pointerup="onRailResizeUp"
+                      @pointercancel="onRailResizeUp"></div>
+                  </div>
                   <div class="epg-ruler-track" :style="{ width: trackWidth + 'px' }">
                     <span v-for="t in ticks" :key="t.x" class="epg-tick" :style="{ left: t.x + 'px' }">{{ t.label }}</span>
                   </div>
                 </div>
+                <transition-group name="epg-rows" tag="div">
                 <div v-for="(ch, i) in visibleChannels" :key="ch.id"
                   :data-channel-id="ch.id"
                   :class="['epg-row', { 'epg-pin-divider': isFirstUnpinned(i), pinned: ch.pinned, 'epg-drop-target': dropTargetId === String(ch.id), 'epg-dragging': dragPinId === String(ch.id) }]">
-                  <div class="epg-rail-cell" :style="{ width: railPx + 'px' }">
-                    <span v-if="ch.pinned" class="epg-drag" title="Drag to reorder pinned channels"
-                      @pointerdown="onPinPointerDown(ch, $event)"
-                      @pointermove="onPinPointerMove"
-                      @pointerup="onPinPointerUp"
-                      @pointercancel="onPinPointerCancel">⠿</span>
+                  <div class="epg-rail-cell" :style="{ width: railPx + 'px' }"
+                    :title="ch.pinned ? 'Drag to reorder pinned channels' : null"
+                    @pointerdown="onPinPointerDown(ch, $event)"
+                    @pointermove="onPinPointerMove"
+                    @pointerup="onPinPointerUp"
+                    @pointercancel="onPinPointerCancel">
                     <button type="button" :class="['epg-pin', { pinned: ch.pinned }]"
                       :title="ch.pinned ? 'Unpin channel' : 'Pin channel to the top'"
                       :aria-label="(ch.pinned ? 'Unpin ' : 'Pin ') + ch.name"
                       @click="togglePin(ch)">★</button>
-                    <span class="epg-rail-num">{{ ch.number ?? '' }}</span>
+                    <span class="epg-rail-num">{{ railNum(ch) }}</span>
                     <img v-if="ch.logo" class="epg-rail-logo" :src="'/api/epg/logo/' + ch.id" alt="" loading="lazy" @error="$event.target.style.display = 'none'" />
                     <span class="epg-rail-name">{{ ch.name }}</span>
                   </div>
@@ -2845,6 +2856,7 @@ const EpgView = {
                     </button>
                   </div>
                 </div>
+                </transition-group>
                 <div v-if="day === 0 && nowX != null" class="epg-nowline" :style="{ left: (railPx + nowX) + 'px' }"></div>
               </div>
             </div>
@@ -3059,14 +3071,26 @@ const EpgView = {
     const lagTime = ref(5)
     const episodesToKeep = ref(0)
 
-    const railPx = EPG_RAIL_PX
+    const clampRailPx = (px) => Math.min(EPG_RAIL_MAX_PX, Math.max(EPG_RAIL_MIN_PX, px))
+    const storedRailPx = () => {
+      try {
+        const px = Number(localStorage.getItem(EPG_RAIL_KEY))
+        return Number.isFinite(px) && px > 0 ? clampRailPx(px) : EPG_RAIL_DEFAULT_PX
+      } catch { return EPG_RAIL_DEFAULT_PX }
+    }
+    const railPx = ref(storedRailPx())
     const trackWidth = EPG_DAY_MIN * EPG_PX_PER_MIN
-    const canvasWidth = railPx + trackWidth
+    const canvasWidth = computed(() => railPx.value + trackWidth)
 
     const nowMs = computed(() => now.value.getTime())
 
     const visibleChannels = computed(() =>
       (guide.value?.channels || []).filter((c) => !c.hidden))
+
+    const railNumWidth = computed(() =>
+      Math.max(2, ...visibleChannels.value.map((c) => String(c.number ?? '').length)))
+    const railNum = (ch) =>
+      ch.number == null ? '' : String(ch.number).padStart(railNumWidth.value, '0')
 
     const ticks = computed(() => {
       if (!guide.value) return []
@@ -3388,8 +3412,11 @@ const EpgView = {
       .map((c) => String(c.id))
 
     // Pointer-based drag (not HTML5 drag-and-drop) so reordering works with a
-    // finger on iOS as well as a mouse. The handle captures the pointer; rows
-    // are hit-tested by their live bounding boxes on every move.
+    // finger on iOS as well as a mouse. The whole rail cell of a pinned row is
+    // the drag surface; the drag only starts after a small movement threshold
+    // so plain clicks and taps (the ★ button) still register. Rows are
+    // hit-tested by their live bounding boxes on every move, and a cloned
+    // ghost of the cell follows the pointer.
     const pinRowUnderPointer = (clientY) => {
       for (const el of document.querySelectorAll('.epg-row.pinned')) {
         const box = el.getBoundingClientRect()
@@ -3398,22 +3425,64 @@ const EpgView = {
       return null
     }
 
-    const onPinPointerDown = (ch, e) => {
-      if (!ch.pinned) return
-      e.preventDefault()
-      try { e.target.setPointerCapture(e.pointerId) } catch { /* ignore */ }
+    let pendingDrag = null
+    let dragDidMove = false
+    let ghostEl = null
+    let ghostDX = 0
+    let ghostDY = 0
+
+    const moveGhost = (e) => {
+      if (!ghostEl) return
+      ghostEl.style.left = `${e.clientX - ghostDX}px`
+      ghostEl.style.top = `${e.clientY - ghostDY}px`
+    }
+
+    const removeGhost = () => {
+      if (!ghostEl) return
+      ghostEl.remove()
+      ghostEl = null
+    }
+
+    const startPinDrag = (e) => {
+      const { ch, cell, pointerId, x, y } = pendingDrag
+      pendingDrag = null
+      dragDidMove = true
+      try { cell.setPointerCapture(pointerId) } catch { /* ignore */ }
       dragPinId.value = String(ch.id)
       dropTargetId.value = null
+      const box = cell.getBoundingClientRect()
+      ghostDX = x - box.left
+      ghostDY = y - box.top
+      ghostEl = cell.cloneNode(true)
+      ghostEl.classList.add('epg-ghost')
+      ghostEl.style.width = `${box.width}px`
+      ghostEl.style.height = `${box.height}px`
+      document.body.appendChild(ghostEl)
+      moveGhost(e)
+    }
+
+    const onPinPointerDown = (ch, e) => {
+      if (!ch.pinned) return
+      if (e.button !== 0 && e.pointerType === 'mouse') return
+      pendingDrag = { ch, cell: e.currentTarget, pointerId: e.pointerId, x: e.clientX, y: e.clientY }
     }
 
     const onPinPointerMove = (e) => {
+      if (pendingDrag) {
+        if (Math.hypot(e.clientX - pendingDrag.x, e.clientY - pendingDrag.y) < EPG_DRAG_THRESHOLD_PX) return
+        startPinDrag(e)
+      }
       if (!dragPinId.value) return
       e.preventDefault()
+      moveGhost(e)
       const over = pinRowUnderPointer(e.clientY)
       dropTargetId.value = over && over !== dragPinId.value ? over : null
     }
 
     const onPinPointerUp = async () => {
+      pendingDrag = null
+      removeGhost()
+      if (dragDidMove) setTimeout(() => { dragDidMove = false }, 0)
       const from = dragPinId.value
       const to = dropTargetId.value
       dragPinId.value = null
@@ -3432,11 +3501,36 @@ const EpgView = {
     }
 
     const onPinPointerCancel = () => {
+      pendingDrag = null
+      removeGhost()
+      dragDidMove = false
       dragPinId.value = null
       dropTargetId.value = null
     }
 
+    const railResize = { active: false, startX: 0, startW: 0 }
+
+    const onRailResizeDown = (e) => {
+      e.preventDefault()
+      try { e.currentTarget.setPointerCapture(e.pointerId) } catch { /* ignore */ }
+      railResize.active = true
+      railResize.startX = e.clientX
+      railResize.startW = railPx.value
+    }
+
+    const onRailResizeMove = (e) => {
+      if (!railResize.active) return
+      railPx.value = clampRailPx(railResize.startW + e.clientX - railResize.startX)
+    }
+
+    const onRailResizeUp = () => {
+      if (!railResize.active) return
+      railResize.active = false
+      try { localStorage.setItem(EPG_RAIL_KEY, String(railPx.value)) } catch { /* private mode */ }
+    }
+
     const togglePin = async (ch) => {
+      if (dragDidMove) return
       const pinned = (guide.value?.channels || [])
         .filter((c) => c.pinned)
         .map((c) => String(c.id))
@@ -3545,7 +3639,7 @@ const EpgView = {
       mode, modes, setMode, day, dayChips, dayTitle, setDay,
       guide, loading, error, needsSetup, loadDay, state, stateError, stateLine,
       scrollEl, railPx, trackWidth, canvasWidth, ticks, nowX, nowMs,
-      visibleChannels, cellState, cellStyle, cellWidth,
+      visibleChannels, railNum, cellState, cellStyle, cellWidth,
       jumpNow, jumpTonight, manualRefresh,
       searchQ, searchActive, searchResults, searching,
       selected, openProgram, closeModal, modalBusy, canRecord, modalChannel,
@@ -3559,6 +3653,7 @@ const EpgView = {
       togglePin, toggleDraftPin, movePin, draftName, isFirstUnpinned,
       dropTargetId, dragPinId,
       onPinPointerDown, onPinPointerMove, onPinPointerUp, onPinPointerCancel,
+      onRailResizeDown, onRailResizeMove, onRailResizeUp,
       channelById, channelName, fmtClock, fmtDayTime, seLabel, ratingLabel, tsOf,
       flashText, flashKind,
     }
