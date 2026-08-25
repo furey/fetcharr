@@ -2901,6 +2901,7 @@ const EpgView = {
             <p v-if="stateError" class="text-sm font-mono text-signal-magenta-hi">{{ stateError }}</p>
             <div v-else-if="!state" class="text-ink-dim font-mono text-sm">▰▰ contacting box…</div>
             <template v-else>
+              <p v-if="state?.stale" class="text-xs font-mono text-plex-yellow">The box is unreachable right now — showing its last known state.</p>
               <p v-if="upcoming.length === 0" class="text-ink-dim text-sm">Nothing scheduled on the box.</p>
               <p v-else-if="upcomingFiltered.length === 0" class="text-ink-dim text-sm">No upcoming recordings match “{{ searchQ.trim() }}”.</p>
               <div v-else class="space-y-3">
@@ -2937,6 +2938,7 @@ const EpgView = {
             <p v-if="stateError" class="text-sm font-mono text-signal-magenta-hi">{{ stateError }}</p>
             <div v-else-if="!state" class="text-ink-dim font-mono text-sm">▰▰ contacting box…</div>
             <template v-else>
+              <p v-if="state?.stale" class="text-xs font-mono text-plex-yellow">The box is unreachable right now — showing its last known state.</p>
               <p v-if="seriesTags.length === 0" class="text-ink-dim text-sm">No series recordings set on the box.</p>
               <p v-else-if="seriesTagsFiltered.length === 0" class="text-ink-dim text-sm">No series match “{{ searchQ.trim() }}”.</p>
               <div v-else class="space-y-3">

@@ -268,9 +268,31 @@ export const searchGuide = async ({ q } = {}) => {
   return { results }
 }
 
+// Box state is expensive to miss on: an unreachable cloud session burns the
+// full 3×10s handshake. So concurrent requests share one attempt, a failure
+// opens a cooldown during which no new attempt starts, and the last good state
+// is served with stale:true instead of an error. Mutations clear the cooldown
+// (via invalidateRecordingState) so a successful command retries immediately.
 export const getRecordingState = async ({ fresh = false } = {}) => {
   const now = Date.now()
   if (!fresh && stateCache && stateCache.expiresAt > now) return stateCache.value
+  if (!fresh && now < stateFailedUntil) {
+    if (stateCache) return { ...stateCache.value, stale: true }
+    throw stateLastError
+  }
+  if (stateInflight) return stateInflight
+  stateInflight = loadRecordingState(now)
+    .catch((err) => {
+      stateFailedUntil = Date.now() + STATE_RETRY_MS
+      stateLastError = err
+      if (stateCache) return { ...stateCache.value, stale: true }
+      throw err
+    })
+    .finally(() => { stateInflight = null })
+  return stateInflight
+}
+
+const loadRecordingState = async (now) => {
   const state = await getBoxState()
   const guide = await getCachedGuide().catch(() => null)
   const upcomingRecordings = projectUpcomingRecordings({
@@ -292,10 +314,14 @@ export const getRecordingState = async ({ fresh = false } = {}) => {
     fetchedAt: now,
   }
   stateCache = { value, expiresAt: now + STATE_TTL_MS }
+  stateFailedUntil = 0
   return value
 }
 
-export const invalidateRecordingState = () => { stateCache = null }
+export const invalidateRecordingState = () => {
+  stateCache = null
+  stateFailedUntil = 0
+}
 
 export const recordProgram = async (args) => {
   const result = await scheduleRecording(args)
@@ -503,6 +529,9 @@ const loadGuide = async (startMs) => {
 let guideCache = null
 let guideInflight = null
 let stateCache = null
+let stateInflight = null
+let stateFailedUntil = 0
+let stateLastError = null
 const imageCache = new Map()
 
 const CHANNEL_SORTS = ['default', 'number', 'name']
@@ -513,6 +542,7 @@ const GUIDE_BLOCKS = 42
 const GUIDE_TTL_MS = 60 * 60 * 1000
 const GUIDE_STALE_RETRY_MS = 60 * 1000
 const STATE_TTL_MS = 45 * 1000
+const STATE_RETRY_MS = 60 * 1000
 const IMAGE_TTL_MS = 24 * 60 * 60 * 1000
 const IMAGE_TIMEOUT_MS = 10000
 const SEARCH_RESULT_CAP = 100
