@@ -622,10 +622,26 @@ const fetchLibraryWithRetry = async (ws, terminalId) => {
       }
       console.warn(
         `[fetch-cloud] I_AM_ALIVE attempt ${attempt}/${HANDSHAKE_ATTEMPTS} timed out`
-          + ` after ${ARE_YOU_ALIVE_TIMEOUT_MS}ms; resending ARE_YOU_ALIVE`,
+          + ` after ${ARE_YOU_ALIVE_TIMEOUT_MS}ms; sending WAKE_STB and resending ARE_YOU_ALIVE`,
       )
+      sendWakeStb(ws, terminalId)
     }
   }
+}
+
+// WAKE_STB exists in the wire protocol (pyfetchtv names the command but never
+// sends it); the Fetch mobile app wakes a sleeping cloud session the same way
+// on open. Fire-and-forget between handshake attempts — a box that is already
+// awake ignores it.
+const sendWakeStb = (ws, terminalId) => {
+  const envelope = buildEnvelope({
+    terminalId,
+    type: 'WAKE_STB',
+    isQueueable: true,
+    requiresSetTopBox: false,
+    onlyPairedSetTopBox: true,
+  })
+  try { ws.send(JSON.stringify(envelope), () => {}) } catch { /* best effort */ }
 }
 
 // Sends ARE_YOU_ALIVE and waits for I_AM_ALIVE, which carries the recording
@@ -644,7 +660,13 @@ const fetchLibraryViaHandshake = (ws, terminalId) =>
     const onMessage = (raw) => {
       let parsed
       try { parsed = JSON.parse(raw.toString()) } catch { return }
-      if (parsed?.message?.type !== 'I_AM_ALIVE') return
+      if (parsed?.message?.type !== 'I_AM_ALIVE') {
+        const type = parsed?.message?.type
+        if (type && type !== 'PONG') {
+          console.warn(`[fetch-cloud] handshake: inbound ${type}${type === 'COMMAND_ERROR' ? ` — ${JSON.stringify(parsed.message?.data ?? {}).slice(0, 300)}` : ''}`)
+        }
+        return
+      }
       clearTimeout(timer)
       ws.removeListener('message', onMessage)
       const data = parsed.message?.data || {}
@@ -738,7 +760,7 @@ const STANDARD_HEADERS = {
 const WS_OPEN_TIMEOUT_MS = 8000
 const AUTH_TIMEOUT_MS = 10000
 const ARE_YOU_ALIVE_TIMEOUT_MS = 10000
-const HANDSHAKE_ATTEMPTS = 2
+const HANDSHAKE_ATTEMPTS = 3
 const DELETE_ACK_TIMEOUT_MS = 15000
 const COMMAND_ACK_TIMEOUT_MS = 15000
 const EPG_TIMEOUT_MS = 15000
