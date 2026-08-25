@@ -27,6 +27,7 @@ export const getGuideDay = async ({ day = 0 } = {}) => {
     dayStart,
     dayEnd,
     fetchedAt: guide.fetchedAt,
+    stale: Boolean(guide.stale),
     sort: prefs.sort,
     channels: orderChannels({ channels: guide.channels, ...prefs }),
     programs,
@@ -260,6 +261,18 @@ export const mergeChannels = ({ dvbChannels, cloudChannels }) => {
     .filter((c) => c.epgId != null)
 }
 
+// The box can list the same service twice (identical epg_id, DVB ids differing
+// only by a source prefix); keep the first occurrence in box order.
+export const dedupeByEpgId = (channels) => {
+  const seen = new Set()
+  return channels.filter((c) => {
+    const key = String(c.epgId)
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
 // Image `original` URLs point at static.lb.i.fetchtv.com.au, which is internal
 // to Fetch and unreachable from the LAN — only the public CDN resizer preset
 // URLs (static.fetchtv.com.au/v4/images/…) actually resolve. Pick the largest
@@ -302,6 +315,13 @@ const getCachedGuide = async () => {
       guideCache = guide
       return guide
     })
+    .catch((err) => {
+      if (guideCache && guideCache.startMs === startMs) {
+        guideCache = { ...guideCache, stale: true, expiresAt: Date.now() + GUIDE_STALE_RETRY_MS }
+        return guideCache
+      }
+      throw err
+    })
     .finally(() => { guideInflight = null })
   return guideInflight
 }
@@ -323,6 +343,7 @@ const loadGuide = async (startMs) => {
   } else {
     try { channels = JSON.parse(await getSetting('epg_channel_lineup') || '[]') } catch { channels = [] }
   }
+  channels = dedupeByEpgId(channels)
   if (channels.length === 0) {
     throw new FetchCloudError(
       "Could not read the box's channel lineup (box unreachable and no lineup cached yet)."
@@ -355,6 +376,7 @@ const THUMB_IMAGE_KEYS = ['landscape_thumbnail', 'phone_environment_image']
 const DAY_MS = 24 * 60 * 60 * 1000
 const GUIDE_BLOCKS = 42
 const GUIDE_TTL_MS = 60 * 60 * 1000
+const GUIDE_STALE_RETRY_MS = 60 * 1000
 const STATE_TTL_MS = 45 * 1000
 const IMAGE_TTL_MS = 24 * 60 * 60 * 1000
 const IMAGE_TIMEOUT_MS = 10000

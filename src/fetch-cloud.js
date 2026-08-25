@@ -439,7 +439,30 @@ const withCloudWs = async ({ activationCode, pin, terminalId }, fn) => {
   }
 }
 
+// Fetch's cloud API rate limits with plain 429s. Honour any Retry-After /
+// RateLimit-Reset hint it sends, fall back to a fixed cooldown otherwise, and
+// short-circuit further requests (no network call) until the cooldown lifts.
+let epgRateLimitedUntil = 0
+
+const rateLimitDelayMs = (headers) => {
+  const retryAfter = Number(headers?.['retry-after'])
+  if (Number.isFinite(retryAfter) && retryAfter > 0) return retryAfter * 1000
+  for (const key of ['x-ratelimit-reset', 'ratelimit-reset', 'x-rate-limit-reset']) {
+    const v = Number(headers?.[key])
+    if (!Number.isFinite(v) || v <= 0) continue
+    return v > 1e9 ? Math.max(v * 1000 - Date.now(), 1000) : v * 1000
+  }
+  return EPG_RATE_LIMIT_FALLBACK_MS
+}
+
 const epgGet = async (url, params) => {
+  if (Date.now() < epgRateLimitedUntil) {
+    const wait = Math.ceil((epgRateLimitedUntil - Date.now()) / 1000)
+    throw new FetchCloudError(
+      `Fetch cloud is rate limiting EPG requests — retry in ${wait}s.`,
+      { stage: 'epg', status: 429, code: 'rate-limited' },
+    )
+  }
   const creds = await getCreds()
   const { authCookie } = await getCachedSession(creds)
   let res
@@ -459,6 +482,19 @@ const epgGet = async (url, params) => {
   if (res.status === 401 || res.status === 403) {
     invalidateCachedSession()
     throw new FetchCloudError(`EPG auth rejected (HTTP ${res.status}).`, { stage: 'epg', status: res.status })
+  }
+  if (res.status === 429) {
+    const delay = rateLimitDelayMs(res.headers)
+    epgRateLimitedUntil = Date.now() + delay
+    const hints = ['retry-after', 'x-ratelimit-reset', 'ratelimit-reset', 'x-ratelimit-limit', 'x-ratelimit-remaining']
+      .map((k) => (res.headers?.[k] != null ? `${k}=${res.headers[k]}` : null))
+      .filter(Boolean)
+      .join(' ')
+    console.warn(`[fetch-cloud] EPG 429 — cooling down ${Math.ceil(delay / 1000)}s${hints ? ` (${hints})` : ' (no rate-limit headers)'}`)
+    throw new FetchCloudError(
+      `Fetch cloud is rate limiting EPG requests — retry in ${Math.ceil(delay / 1000)}s.`,
+      { stage: 'epg', status: 429, code: 'rate-limited' },
+    )
   }
   if (res.status >= 400) {
     throw new FetchCloudError(`EPG HTTP ${res.status}`, { stage: 'epg', status: res.status })
@@ -706,6 +742,7 @@ const HANDSHAKE_ATTEMPTS = 2
 const DELETE_ACK_TIMEOUT_MS = 15000
 const COMMAND_ACK_TIMEOUT_MS = 15000
 const EPG_TIMEOUT_MS = 15000
+const EPG_RATE_LIMIT_FALLBACK_MS = 60_000
 const EPG_BLOCK_SECONDS = 14400
 const SESSION_TTL_MS = 5 * 60 * 1000
 const DEFAULT_LEAD_MINUTES = 3

@@ -454,9 +454,9 @@ const DashboardView = {
             <div class="text-xs font-mono uppercase tracking-[0.16em] text-ink-dim mb-3">Next recordings</div>
             <div class="space-y-2">
               <p v-for="r in guideUpcoming" :key="r.id" class="flex items-center gap-2.5 font-mono text-xs text-ink-dim min-w-0">
-                <span class="led-dot sm shrink-0" style="background:#009be4"></span>
+                <span class="led-dot sm shrink-0" :style="{ background: isSeriesRec(r) ? '#e2b03c' : '#009be4' }"></span>
                 <span class="truncate min-w-0"><span class="text-ink">{{ r.name }}</span>
-                · {{ fmtClockTz(tsOfMs(r.startDate)) }}<template v-if="r.episodeTitle"> · {{ r.episodeTitle }}</template></span>
+                · {{ fmtClockTz(tsOfMs(r.startDate)) }}<template v-if="r.episodeTitle"> · {{ r.episodeTitle }}</template> · {{ isSeriesRec(r) ? 'series' : 'one-off' }}</span>
               </p>
             </div>
           </div>
@@ -510,6 +510,7 @@ const DashboardView = {
     const cloudConfigured = ref(false)
     const onNow = ref([])
     const guideUpcoming = ref([])
+    const guideSeriesLinks = ref(new Set())
     const guideOk = ref(true)
 
     const lastSync = computed(() => recentSyncs.value[0] || null)
@@ -531,11 +532,15 @@ const DashboardView = {
         return
       }
       const s = await api('GET', '/api/epg/state').catch(() => null)
+      guideSeriesLinks.value = new Set((s?.seriesTags || []).map((t) => String(t.seriesLinkId ?? t.id)))
       guideUpcoming.value = (s?.futureRecordings || [])
         .filter((r) => !r.pendingDelete)
         .sort((a, b) => tsOfMs(a.startDate) - tsOfMs(b.startDate))
         .slice(0, 3)
     }
+
+    const isSeriesRec = (r) =>
+      r?.seriesLinkId != null && guideSeriesLinks.value.has(String(r.seriesLinkId))
 
     const plexLabel = computed(() => plexConfigured.value ? 'Connected' : 'Not configured')
     const plexClass = computed(() => plexConfigured.value ? 'text-plex-yellow' : 'text-ink-dim')
@@ -2734,9 +2739,12 @@ const EpgView = {
                 <div class="flex items-start justify-between gap-3">
                   <button type="button" class="deck-card-title text-left btn-reset" style="background:none;border:none;padding:0;cursor:pointer;color:inherit;font:inherit"
                     @click="openProgram(p, channelById(p.channelId))">{{ p.title }}</button>
-                  <span v-if="cellState(p) === 'recording'" class="pill recording">RECORDING</span>
-                  <span v-else-if="cellState(p) === 'scheduled'" class="pill downloading">SCHEDULED</span>
-                  <span v-else-if="cellState(p) === 'series'" class="pill done">SERIES</span>
+                  <span class="flex items-center gap-1.5 shrink-0">
+                    <span v-if="isSeriesScheduled(p)" class="pill done">SERIES</span>
+                    <span v-if="cellState(p) === 'recording'" class="pill recording">RECORDING</span>
+                    <span v-else-if="cellState(p) === 'scheduled'" class="pill downloading">SCHEDULED</span>
+                    <span v-else-if="cellState(p) === 'series'" class="pill done">SERIES</span>
+                  </span>
                 </div>
                 <p class="deck-card-meta">
                   {{ p.channelName }} · {{ fmtDayTime(p.start) }}–{{ fmtClock(p.end) }}<template v-if="p.episode_title"> · {{ p.episode_title }}</template>
@@ -2765,6 +2773,9 @@ const EpgView = {
               </div>
             </div>
             <p v-if="stateLine" class="text-xs font-mono text-ink-mute">{{ stateLine }}</p>
+            <p v-if="guide?.stale" class="text-xs font-mono text-plex-yellow">
+              Showing the cached guide — Fetch cloud is rate limiting; it refreshes automatically when the limit lifts.
+            </p>
             <div v-if="needsSetup" class="space-y-5">
               <div class="relative rounded overflow-hidden border border-hairline max-w-3xl">
                 <img src="/img/guide-preview.jpg" alt="A preview of the TV Guide grid"
@@ -2807,10 +2818,14 @@ const EpgView = {
               <button type="button" class="btn btn-sm" @click="loadDay(day, { force: true })">RETRY</button>
             </div>
             <div v-else-if="loading && !guide" class="text-ink-dim font-mono text-sm">▰▰ loading guide…</div>
-            <div v-else-if="guide" class="epg-scroll" ref="scrollEl">
+            <div v-else-if="guide" class="relative">
+              <button v-if="pinsOffscreen" type="button" class="epg-pinned-chip" @click="scrollRailTop">↑ {{ pinnedCount }} PINNED</button>
+              <div class="epg-scroll" ref="scrollEl">
               <div class="epg-canvas" :style="{ width: canvasWidth + 'px' }">
                 <div class="epg-ruler">
                   <div class="epg-ruler-corner" :style="{ width: railPx + 'px' }">
+                    <input v-model="railFilter" type="search" class="epg-corner-filter"
+                      placeholder="filter…" aria-label="Filter channels by number or name" />
                     <div class="epg-rail-resizer" title="Drag to resize the channel rail"
                       @pointerdown="onRailResizeDown"
                       @pointermove="onRailResizeMove"
@@ -2842,7 +2857,7 @@ const EpgView = {
                   <div class="epg-track" :style="{ width: trackWidth + 'px' }">
                     <button v-for="p in guide.programs[ch.id]" :key="p.program_id + '-' + p.start" type="button"
                       :class="['epg-cell', cellState(p), { past: p.end <= nowMs, 'on-now': p.start <= nowMs && p.end > nowMs }]"
-                      :style="cellStyle(p)" :title="p.title"
+                      :style="cellStyle(p)" :title="cellTitle(p)"
                       @click="openProgram(p, ch)">
                       <template v-if="cellWidth(p) > 40">
                         <span class="epg-cell-title">{{ p.title }}</span>
@@ -2850,6 +2865,7 @@ const EpgView = {
                           <span v-if="cellState(p) === 'recording'" class="led-dot sm live"></span>
                           <span v-else-if="cellState(p) === 'scheduled'" class="led-dot sm" style="background:#009be4"></span>
                           <span v-else-if="cellState(p) === 'series'" class="led-dot sm" style="background:#e2b03c"></span>
+                          <span v-if="isSeriesScheduled(p)" class="led-dot sm" style="background:#e2b03c"></span>
                           {{ fmtClock(p.start) }}
                         </span>
                       </template>
@@ -2858,6 +2874,7 @@ const EpgView = {
                 </div>
                 </transition-group>
                 <div v-if="day === 0 && nowX != null" class="epg-nowline" :style="{ left: (railPx + nowX) + 'px' }"></div>
+              </div>
               </div>
             </div>
           </template>
@@ -2871,11 +2888,15 @@ const EpgView = {
                 <article v-for="r in upcoming" :key="r.id" class="deck-card space-y-1.5">
                   <div class="flex items-start justify-between gap-3">
                     <span class="deck-card-title">{{ r.name }}</span>
-                    <span v-if="isActiveRecording(r)" class="pill recording">RECORDING</span>
-                    <span v-else class="pill downloading">SCHEDULED</span>
+                    <span class="flex items-center gap-1.5 shrink-0">
+                      <span v-if="isSeriesRec(r)" class="pill done">SERIES</span>
+                      <span v-else class="pill">ONE-OFF</span>
+                      <span v-if="isActiveRecording(r)" class="pill recording">RECORDING</span>
+                      <span v-else class="pill downloading">SCHEDULED</span>
+                    </span>
                   </div>
                   <p class="deck-card-meta">
-                    {{ channelName(r.channelId) }} · {{ fmtDayTime(tsOf(r.startDate)) }}–{{ fmtClock(tsOf(r.endDate)) }}<template v-if="r.episodeTitle"> · {{ r.episodeTitle }}</template><template v-if="r.seriesLinkId"> · series</template>
+                    {{ channelName(r.channelId) }} · {{ fmtDayTime(tsOf(r.startDate)) }}–{{ fmtClock(tsOf(r.endDate)) }}<template v-if="r.episodeTitle"> · {{ r.episodeTitle }}</template>
                   </p>
                   <div class="flex items-center justify-end pt-1">
                     <button type="button" class="btn btn-sm btn-danger" @click="cancelUpcoming(r)"
@@ -2909,6 +2930,7 @@ const EpgView = {
         </div>
       </section>
 
+      <teleport to="body">
       <div v-if="selected" class="epg-modal-backdrop" @click.self="closeModal">
         <section class="panel epg-modal">
           <header class="panel-header">
@@ -2927,7 +2949,7 @@ const EpgView = {
             <p v-if="selected.program.episode_title" class="text-sm text-ink">{{ selected.program.episode_title }}</p>
             <p v-if="selected.program.synopsis" class="text-sm text-ink-dim leading-relaxed">{{ selected.program.synopsis }}</p>
             <p v-if="cellState(selected.program) === 'scheduled' || cellState(selected.program) === 'recording'" class="text-xs font-mono text-signal-blue-hi">
-              {{ cellState(selected.program) === 'recording' ? 'Recording now on the box.' : 'Scheduled to record on the box.' }}
+              {{ cellState(selected.program) === 'recording' ? 'Recording now on the box' : 'Scheduled to record on the box' }}{{ isSeriesScheduled(selected.program) ? ' (part of a series recording).' : ' (one-off recording).' }}
             </p>
             <div v-if="canRecord" class="grid grid-cols-2 gap-3">
               <div>
@@ -2969,6 +2991,9 @@ const EpgView = {
         </section>
       </div>
 
+      </teleport>
+
+      <teleport to="body">
       <div v-if="channelsModal" class="epg-modal-backdrop" @click.self="channelsModal = false">
         <section class="panel epg-modal">
           <header class="panel-header">
@@ -3032,6 +3057,7 @@ const EpgView = {
           </div>
         </section>
       </div>
+      </teleport>
     </div>
   `,
   setup() {
@@ -3082,10 +3108,21 @@ const EpgView = {
     const trackWidth = EPG_DAY_MIN * EPG_PX_PER_MIN
     const canvasWidth = computed(() => railPx.value + trackWidth)
 
-    const nowMs = computed(() => now.value.getTime())
+    // Minute resolution on purpose: the seconds clock ref would otherwise
+    // re-render every grid cell once a second (past/on-now classes read this).
+    const nowMs = computed(() => Math.floor(now.value.getTime() / 60_000) * 60_000)
 
-    const visibleChannels = computed(() =>
-      (guide.value?.channels || []).filter((c) => !c.hidden))
+    const railFilter = ref('')
+
+    const visibleChannels = computed(() => {
+      const base = (guide.value?.channels || []).filter((c) => !c.hidden)
+      const q = railFilter.value.trim().toLowerCase()
+      if (!q) return base
+      return base.filter((c) =>
+        (c.name || '').toLowerCase().includes(q) || String(c.number ?? '').startsWith(q))
+    })
+
+    const pinnedCount = computed(() => visibleChannels.value.filter((c) => c.pinned).length)
 
     const railNumWidth = computed(() =>
       Math.max(2, ...visibleChannels.value.map((c) => String(c.number ?? '').length)))
@@ -3207,6 +3244,22 @@ const EpgView = {
       if (scheduled) return 'scheduled'
       if (p.series_link != null && seriesLinkSet.value.has(String(p.series_link))) return 'series'
       return ''
+    }
+
+    const isSeriesScheduled = (p) => {
+      const scheduled = scheduledByProgramId.value.get(String(p.program_id ?? p.programId))
+      return Boolean(scheduled?.seriesLinkId != null
+        && seriesLinkSet.value.has(String(scheduled.seriesLinkId)))
+    }
+
+    const cellTitle = (p) => {
+      const state = cellState(p)
+      if (state === 'recording') return `${p.title} · recording now`
+      if (state === 'scheduled') {
+        return `${p.title} · ${isSeriesScheduled(p) ? 'series recording scheduled' : 'one-off recording scheduled'}`
+      }
+      if (state === 'series') return `${p.title} · series tag on this show`
+      return p.title
     }
 
     const cellX = (t) => {
@@ -3508,6 +3561,29 @@ const EpgView = {
       dropTargetId.value = null
     }
 
+    const isSeriesRec = (r) =>
+      r?.seriesLinkId != null && seriesLinkSet.value.has(String(r.seriesLinkId))
+
+    const pinsOffscreen = ref(false)
+
+    const updatePinsOffscreen = () => {
+      const el = scrollEl.value
+      if (!el) { pinsOffscreen.value = false; return }
+      const rows = el.querySelectorAll('.epg-row.pinned')
+      if (!rows.length) { pinsOffscreen.value = false; return }
+      const last = rows[rows.length - 1].getBoundingClientRect()
+      const rulerBottom = el.getBoundingClientRect().top + el.querySelector('.epg-ruler').offsetHeight
+      pinsOffscreen.value = last.bottom < rulerBottom
+    }
+
+    const scrollRailTop = () => scrollEl.value?.scrollTo({ top: 0, behavior: 'smooth' })
+
+    watch(scrollEl, (el, prev) => {
+      if (prev) prev.removeEventListener('scroll', updatePinsOffscreen)
+      if (el) el.addEventListener('scroll', updatePinsOffscreen, { passive: true })
+      updatePinsOffscreen()
+    })
+
     const railResize = { active: false, startX: 0, startW: 0 }
 
     const onRailResizeDown = (e) => {
@@ -3639,7 +3715,8 @@ const EpgView = {
       mode, modes, setMode, day, dayChips, dayTitle, setDay,
       guide, loading, error, needsSetup, loadDay, state, stateError, stateLine,
       scrollEl, railPx, trackWidth, canvasWidth, ticks, nowX, nowMs,
-      visibleChannels, railNum, cellState, cellStyle, cellWidth,
+      visibleChannels, railNum, railFilter, pinnedCount, pinsOffscreen, scrollRailTop,
+      cellState, cellStyle, cellWidth, cellTitle, isSeriesScheduled, isSeriesRec,
       jumpNow, jumpTonight, manualRefresh,
       searchQ, searchActive, searchResults, searching,
       selected, openProgram, closeModal, modalBusy, canRecord, modalChannel,
