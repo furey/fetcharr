@@ -444,7 +444,7 @@ const withCloudWs = async ({ activationCode, pin, terminalId }, fn) => {
 // short-circuit further requests (no network call) until the cooldown lifts.
 let epgRateLimitedUntil = 0
 
-const rateLimitDelayMs = (headers) => {
+export const rateLimitDelayMs = (headers) => {
   const retryAfter = Number(headers?.['retry-after'])
   if (Number.isFinite(retryAfter) && retryAfter > 0) return retryAfter * 1000
   for (const key of ['x-ratelimit-reset', 'ratelimit-reset', 'x-rate-limit-reset']) {
