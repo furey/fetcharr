@@ -1122,6 +1122,19 @@ body.epg-drag-lock * {
     height: 3rem;
   }
 
+  .epg-rail-resizer {
+    display: none;
+  }
+
+  .epg-corner-filter {
+    font-size: 1rem;
+    letter-spacing: 0.04em;
+  }
+
+  .epg-modal-art {
+    max-height: 6.5rem;
+  }
+
   .epg-modal-backdrop {
     align-items: flex-end;
     padding: 0;

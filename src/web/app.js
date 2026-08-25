@@ -2833,7 +2833,7 @@ const EpgView = {
               <button type="button" class="btn btn-sm" @click="loadDay(day, { force: true })">RETRY</button>
             </div>
             <div v-else-if="loading && !guide" class="text-ink-dim font-mono text-sm">▰▰ loading guide…</div>
-            <div v-else-if="guide" class="relative" :style="{ '--epg-rail-px': railPx + 'px' }">
+            <div v-else-if="guide" class="relative" :style="{ '--epg-rail-px': 'min(' + railPx + 'px, 32vw)' }">
               <button v-if="pinsOffscreen" type="button" class="epg-pinned-chip" @click="scrollRailTop">↑ {{ pinnedCount }} PINNED</button>
               <div class="epg-scroll" ref="scrollEl">
               <div class="epg-canvas" :style="{ width: 'calc(var(--epg-rail-px) + ' + trackWidth + 'px)' }">
