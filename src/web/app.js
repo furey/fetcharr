@@ -3573,10 +3573,15 @@ const EpgView = {
       ghostEl = null
     }
 
+    const setDragLock = (on) => {
+      try { document.body.classList.toggle('epg-drag-lock', on) } catch { /* ignore */ }
+    }
+
     const startPinDrag = (e) => {
       const { ch, cell, pointerId, x, y } = pendingDrag
       pendingDrag = null
       dragDidMove = true
+      setDragLock(true)
       try { cell.setPointerCapture(pointerId) } catch { /* ignore */ }
       dragPinId.value = String(ch.id)
       dropTargetId.value = null
@@ -3611,6 +3616,7 @@ const EpgView = {
 
     const onPinPointerUp = async () => {
       pendingDrag = null
+      setDragLock(false)
       removeGhost()
       if (dragDidMove) setTimeout(() => { dragDidMove = false }, 0)
       const from = dragPinId.value
@@ -3632,6 +3638,7 @@ const EpgView = {
 
     const onPinPointerCancel = () => {
       pendingDrag = null
+      setDragLock(false)
       removeGhost()
       dragDidMove = false
       dragPinId.value = null
@@ -3677,6 +3684,7 @@ const EpgView = {
 
     const onRailResizeDown = (e) => {
       e.preventDefault()
+      setDragLock(true)
       try { e.currentTarget.setPointerCapture(e.pointerId) } catch { /* ignore */ }
       railResize.active = true
       railResize.startX = e.clientX
@@ -3689,6 +3697,7 @@ const EpgView = {
     }
 
     const onRailResizeUp = () => {
+      setDragLock(false)
       if (!railResize.active) return
       railResize.active = false
       try { localStorage.setItem(EPG_RAIL_KEY, String(railPx.value)) } catch { /* private mode */ }
