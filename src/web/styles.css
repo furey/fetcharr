@@ -80,6 +80,44 @@ body {
   }
 }
 
+.btn-glyph {
+  display: inline-block;
+  font-size: 1.15em;
+  line-height: 1;
+  vertical-align: -0.09em;
+}
+
+.spinner {
+  display: inline-block;
+  width: 0.9em;
+  height: 0.9em;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spinner-rotate 0.6s linear infinite;
+}
+
+.spinner-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  margin: -0.45em 0 0 -0.45em;
+}
+
+.btn { position: relative; }
+
+.btn.is-busy .btn-label {
+  visibility: hidden;
+}
+
+@keyframes spinner-rotate {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation-duration: 1.6s; }
+}
+
 .signal-boot {
   animation: boot-fade 0.6s ease-out;
 }
@@ -615,6 +653,18 @@ a.icon-link {
 .deck-card.active {
   background: rgba(241, 12, 105, 0.08);
   box-shadow: inset 3px 0 0 0 #f10c69;
+}
+
+.deck-card-clickable {
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+
+.deck-card-clickable:hover,
+.deck-card-clickable:focus-visible {
+  border-color: rgba(0, 155, 228, 0.7);
+  background: rgba(0, 155, 228, 0.06);
+  outline: none;
 }
 
 .deck-card.tombstone {

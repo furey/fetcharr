@@ -29,19 +29,53 @@ export const getGuideDay = async ({ day = 0 } = {}) => {
     fetchedAt: guide.fetchedAt,
     stale: Boolean(guide.stale),
     sort: prefs.sort,
+    hideSdSimulcasts: prefs.hideSdSimulcasts,
+    hiddenIds: prefs.hiddenIds,
     channels: orderChannels({ channels: guide.channels, ...prefs }),
     programs,
   }
 }
 
+// An SD channel is a simulcast sibling when another channel shares its base name
+// (name minus a trailing "HD", with AU aliases like Nine↔9) and that sibling is
+// the HD one. Anything unpaired stays visible.
+const SIMULCAST_ALIASES = { nine: '9', seven: '7', ten: '10' }
+
+const simulcastBaseKey = (name) => {
+  const base = (name || '').toLowerCase().replace(/\s*hd$/, '').trim()
+  return SIMULCAST_ALIASES[base] || base
+}
+
+const isHdChannel = (c) => c.hd === true || /hd$/i.test((c.name || '').trim())
+
+export const sdSimulcastIds = (channels) => {
+  const groups = new Map()
+  for (const c of channels) {
+    const key = simulcastBaseKey(c.name)
+    if (!key) continue
+    if (!groups.has(key)) groups.set(key, [])
+    groups.get(key).push(c)
+  }
+  const ids = new Set()
+  for (const group of groups.values()) {
+    if (group.length < 2 || !group.some(isHdChannel)) continue
+    for (const c of group) {
+      if (!isHdChannel(c)) ids.add(String(c.id))
+    }
+  }
+  return ids
+}
+
 // Pinned channels float to the top in pin order; the rest follow in the chosen
 // sort. Hidden and pinned are mutually exclusive (enforced on save).
-export const orderChannels = ({ channels, pinnedIds = [], hiddenIds = [], sort = 'default' }) => {
+export const orderChannels = ({ channels, pinnedIds = [], hiddenIds = [], sort = 'default', hideSdSimulcasts = false }) => {
   const hiddenSet = new Set(hiddenIds.map(String))
+  const simulcastSet = hideSdSimulcasts ? sdSimulcastIds(channels) : new Set()
   const pinOrder = new Map(pinnedIds.map((id, i) => [String(id), i]))
   const annotated = channels.map((c) => {
     const pinned = pinOrder.has(String(c.id))
-    return { ...c, pinned, hidden: !pinned && hiddenSet.has(String(c.id)) }
+    const id = String(c.id)
+    return { ...c, pinned, hidden: !pinned && (hiddenSet.has(id) || simulcastSet.has(id)) }
   })
   const pinned = annotated
     .filter((c) => c.pinned)
@@ -56,34 +90,39 @@ export const orderChannels = ({ channels, pinnedIds = [], hiddenIds = [], sort =
 }
 
 export const getChannelPrefs = async () => {
-  const [pinnedRaw, hiddenRaw, sortRaw] = await Promise.all([
+  const [pinnedRaw, hiddenRaw, sortRaw, hideSdRaw] = await Promise.all([
     getSetting('epg_pinned_channels'),
     getSetting('epg_hidden_channels'),
     getSetting('epg_channel_sort'),
+    getSetting('epg_hide_sd_simulcasts'),
   ])
   return {
     pinnedIds: parseJsonArray(pinnedRaw),
     hiddenIds: parseJsonArray(hiddenRaw),
     sort: CHANNEL_SORTS.includes(sortRaw) ? sortRaw : 'default',
+    hideSdSimulcasts: hideSdRaw === '1',
   }
 }
 
 // Partial update; pinning a channel unhides it, hiding one unpins it.
-export const setChannelPrefs = async ({ pinnedIds, hiddenIds, sort } = {}) => {
+export const setChannelPrefs = async ({ pinnedIds, hiddenIds, sort, hideSdSimulcasts } = {}) => {
   const current = await getChannelPrefs()
   const next = {
     pinnedIds: pinnedIds ?? current.pinnedIds,
     hiddenIds: hiddenIds ?? current.hiddenIds,
     sort: sort ?? current.sort,
+    hideSdSimulcasts: hideSdSimulcasts ?? current.hideSdSimulcasts,
   }
   if (!CHANNEL_SORTS.includes(next.sort)) next.sort = 'default'
   const pinnedSet = new Set(next.pinnedIds.map(String))
   next.hiddenIds = next.hiddenIds.map(String).filter((id) => !pinnedSet.has(id))
   next.pinnedIds = next.pinnedIds.map(String)
+  next.hideSdSimulcasts = Boolean(next.hideSdSimulcasts)
   await Promise.all([
     setSetting('epg_pinned_channels', JSON.stringify(next.pinnedIds)),
     setSetting('epg_hidden_channels', JSON.stringify(next.hiddenIds)),
     setSetting('epg_channel_sort', next.sort),
+    setSetting('epg_hide_sd_simulcasts', next.hideSdSimulcasts ? '1' : '0'),
   ])
   return next
 }
@@ -124,6 +163,68 @@ export const nowAndNext = (programs, nowMs) => {
   return { now: trimProgram(now), next: trimProgram(next) }
 }
 
+// The box only materialises a timer (currentFutureRecordings) shortly before an
+// episode airs, so a series set for tomorrow shows nothing there yet. Project
+// the next episodes from each series tag against the loaded guide and merge them
+// with the real timers, so the Upcoming view reflects what will actually record.
+// A projected entry is source:'series' (expected); a real timer is source:'timer'.
+export const projectUpcomingRecordings = ({ seriesTags = [], futureRecordings = [], guide, nowMs = Date.now() } = {}) => {
+  const timers = futureRecordings
+    .filter((r) => !r.pendingDelete)
+    .map((r) => ({
+      programId: r.programId,
+      name: r.name,
+      channelId: r.channelId,
+      channelName: r.channelName || null,
+      startDate: r.startDate,
+      endDate: r.endDate,
+      episodeTitle: r.episodeTitle || null,
+      seriesLinkId: r.seriesLinkId || null,
+      source: 'timer',
+    }))
+  const timerProgramIds = new Set(timers.map((t) => String(t.programId)))
+
+  const projected = []
+  if (guide?.channels?.length) {
+    const tagByLink = new Map()
+    for (const t of seriesTags) {
+      const link = t?.seriesLinkId ?? t?.id
+      if (link != null) tagByLink.set(String(link), t)
+    }
+    const seenEpisode = new Set()
+    for (const channel of guide.channels) {
+      const rows = [...(guide.programsByChannel?.[String(channel.epgId)] || [])]
+        .sort((a, b) => a.start - b.start)
+      for (const p of rows) {
+        if (p.start <= nowMs || p.series_link == null) continue
+        const tag = tagByLink.get(String(p.series_link))
+        if (!tag || String(tag.channelId) !== String(channel.id)) continue
+        if (timerProgramIds.has(String(p.program_id))) continue
+        if (p.series_no != null && p.episode_no != null) {
+          const key = `${p.series_link}|${p.series_no}x${p.episode_no}`
+          if (seenEpisode.has(key)) continue
+          seenEpisode.add(key)
+        }
+        projected.push({
+          programId: p.program_id,
+          name: p.title,
+          channelId: channel.id,
+          channelName: channel.name || null,
+          startDate: p.start,
+          endDate: p.end,
+          episodeTitle: p.episode_title || null,
+          seriesLinkId: p.series_link,
+          seriesNo: p.series_no ?? null,
+          episodeNo: p.episode_no ?? null,
+          source: 'series',
+        })
+      }
+    }
+  }
+
+  return [...timers, ...projected].sort((a, b) => a.startDate - b.startDate)
+}
+
 const trimProgram = (p) => p == null ? null : {
   program_id: p.program_id,
   epg_program_id: p.epg_program_id,
@@ -147,9 +248,12 @@ export const searchGuide = async ({ q } = {}) => {
   const needle = (q || '').trim().toLowerCase()
   if (needle.length < 2) return { results: [] }
   const guide = await getCachedGuide()
+  const prefs = await getChannelPrefs()
+  const searchChannels = orderChannels({ channels: guide.channels, ...prefs })
+    .filter((c) => !c.hidden)
   const nowMs = Date.now()
   const results = []
-  for (const channel of guide.channels) {
+  for (const channel of searchChannels) {
     const rows = guide.programsByChannel[String(channel.epgId)] || []
     for (const p of rows) {
       if (p.end <= nowMs) continue
@@ -168,6 +272,13 @@ export const getRecordingState = async ({ fresh = false } = {}) => {
   const now = Date.now()
   if (!fresh && stateCache && stateCache.expiresAt > now) return stateCache.value
   const state = await getBoxState()
+  const guide = await getCachedGuide().catch(() => null)
+  const upcomingRecordings = projectUpcomingRecordings({
+    seriesTags: state.seriesTags,
+    futureRecordings: state.futureRecordings,
+    guide,
+    nowMs: now,
+  })
   const value = {
     standby: state.standby,
     storageInfo: state.storageInfo,
@@ -175,6 +286,7 @@ export const getRecordingState = async ({ fresh = false } = {}) => {
     maxConcurrentRecordings:
       state.sysInfo?.hardwareCapabilities?.tuner?.maximumRecordingCount ?? null,
     futureRecordings: state.futureRecordings,
+    upcomingRecordings,
     seriesTags: state.seriesTags,
     activeRecordingIds: state.activeRecordingIds,
     fetchedAt: now,
