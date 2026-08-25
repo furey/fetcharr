@@ -426,14 +426,19 @@ const DashboardView = {
           <a href="#/guide" class="text-xs font-mono uppercase tracking-[0.16em]">Open guide →</a>
         </header>
         <div class="panel-body space-y-5">
-          <div v-if="onNow.length" class="space-y-3">
+          <div v-if="onNow.length">
+            <div class="text-xs font-mono uppercase tracking-[0.16em] text-ink-dim mb-3">On now · pinned channels</div>
+            <div class="space-y-3">
             <div v-for="e in onNow" :key="e.channel.id" class="flex items-center gap-3 md:gap-4">
               <img v-if="e.channel.hasLogo" class="epg-rail-logo shrink-0" :src="'/api/epg/logo/' + e.channel.id" alt=""
                 @error="$event.target.style.display = 'none'" />
               <span class="font-mono text-xs text-ink-dim w-20 md:w-28 shrink-0 truncate" :title="e.channel.name">{{ e.channel.name }}</span>
               <div class="flex-1 min-w-0">
                 <template v-if="e.now">
-                  <span class="text-sm text-ink block truncate">{{ e.now.title }}</span>
+                  <span class="block truncate">
+                    <span class="text-sm font-semibold text-ink">{{ e.now.title }}</span>
+                    <span class="font-mono text-xs text-ink-dim"> · {{ onNowMeta(e.now) }}</span>
+                  </span>
                   <div class="progress" style="margin-top: 0.25rem; max-width: none;">
                     <div class="progress-track">
                       <div class="progress-fill" :style="{ width: onNowPercent(e.now) + '%' }"></div>
@@ -445,6 +450,7 @@ const DashboardView = {
               <span v-if="e.next" class="hidden sm:block font-mono text-xs text-ink-dim min-w-0 max-w-[16rem] truncate">
                 next · {{ e.next.title }} · {{ fmtClockTz(e.next.start) }}
               </span>
+            </div>
             </div>
           </div>
           <p v-else class="text-xs text-ink-dim">
@@ -519,6 +525,11 @@ const DashboardView = {
       const span = p.end - p.start
       if (span <= 0) return 0
       return Math.min(100, Math.max(0, Math.round(((Date.now() - p.start) / span) * 100)))
+    }
+
+    const onNowMeta = (p) => {
+      const mins = Math.max(0, Math.ceil((p.end - Date.now()) / 60_000))
+      return `Started ${fmtClockTz(p.start)} · ${mins} min${mins === 1 ? '' : 's'} remaining`
     }
 
     const loadGuidePanel = async () => {
@@ -607,7 +618,7 @@ const DashboardView = {
       showCount, showEnabledCount, recordingsTotal, recordings7dCount,
       plexLabel, plexClass, plexHost,
       cloudLabel, cloudClass, cloudTerminalId, cloudConfigured,
-      onNow, guideUpcoming, guideOk, onNowPercent, isSeriesRec, fmtClockTz, tsOfMs,
+      onNow, guideUpcoming, guideOk, onNowPercent, onNowMeta, isSeriesRec, fmtClockTz, tsOfMs,
       starting, syncNow, fmtTime,
       flashText, flashKind,
     }
@@ -2976,7 +2987,18 @@ const EpgView = {
             </div>
             <div class="flex flex-wrap items-center justify-end gap-2 pt-1">
               <template v-if="cellState(selected.program) === 'scheduled' || cellState(selected.program) === 'recording'">
-                <button type="button" class="btn btn-sm btn-danger" @click="cancelSelected" :disabled="modalBusy">
+                <template v-if="isSeriesScheduled(selected.program) && cancelChoice">
+                  <span class="text-xs font-mono text-ink-mute">This is part of a series recording — cancel what?</span>
+                  <button type="button" class="btn btn-sm btn-danger" @click="cancelSelected" :disabled="modalBusy">
+                    {{ modalBusy ? '…' : '⨯ THIS EPISODE' }}
+                  </button>
+                  <button type="button" class="btn btn-sm btn-danger" @click="cancelSelectedSeries" :disabled="modalBusy">
+                    {{ modalBusy ? '…' : '⨯ WHOLE SERIES' }}
+                  </button>
+                  <button type="button" class="btn btn-sm" @click="cancelChoice = false" :disabled="modalBusy">KEEP</button>
+                </template>
+                <button v-else type="button" class="btn btn-sm btn-danger"
+                  @click="isSeriesScheduled(selected.program) ? (cancelChoice = true) : cancelSelected()" :disabled="modalBusy">
                   {{ modalBusy ? '…' : '⨯ CANCEL RECORDING' }}
                 </button>
               </template>
@@ -3374,10 +3396,14 @@ const EpgView = {
       leadTime.value = 3
       lagTime.value = 5
       episodesToKeep.value = 0
+      cancelChoice.value = false
       selected.value = { program: p, channel }
     }
 
-    const closeModal = () => { selected.value = null }
+    const closeModal = () => {
+      cancelChoice.value = false
+      selected.value = null
+    }
 
     const recordSelected = async () => {
       const { program, channel } = selected.value
@@ -3423,12 +3449,33 @@ const EpgView = {
       }
     }
 
+    const cancelChoice = ref(false)
+
     const cancelSelected = async () => {
       const { program } = selected.value
       modalBusy.value = true
       try {
         await api('POST', '/api/epg/cancel', { program_id: program.program_id })
         flash({ msg: `Cancelled "${program.title}".` })
+        closeModal()
+        await loadState({ fresh: true })
+      } catch (err) {
+        flash({ msg: `Cancel failed: ${err.message}`, kind: 'err', ms: 8000 })
+      } finally {
+        modalBusy.value = false
+      }
+    }
+
+    const cancelSelectedSeries = async () => {
+      const { program } = selected.value
+      const rec = scheduledByProgramId.value.get(String(program.program_id ?? program.programId))
+      modalBusy.value = true
+      try {
+        await api('POST', '/api/epg/cancel-series', {
+          program_id: rec?.programId ?? null,
+          series_link_id: rec?.seriesLinkId,
+        })
+        flash({ msg: `Series recording cancelled.` })
         closeModal()
         await loadState({ fresh: true })
       } catch (err) {
@@ -3751,7 +3798,7 @@ const EpgView = {
       selected, openProgram, closeModal, modalBusy, canRecord, modalChannel,
       leadTime, lagTime, episodesToKeep,
       leadOptions: EPG_LEAD_OPTIONS, lagOptions: EPG_LAG_OPTIONS, keepOptions: EPG_KEEP_OPTIONS,
-      recordSelected, recordSelectedSeries, cancelSelected,
+      recordSelected, recordSelectedSeries, cancelSelected, cancelSelectedSeries, cancelChoice,
       upcoming, seriesTags, seriesKey, cancelUpcoming, cancelSeriesTag,
       isActiveRecording: (r) => activeRecordingSet.value.has(String(r.id)),
       busyId, channelsModal, openChannelsModal, hiddenDraft, toggleHidden,
