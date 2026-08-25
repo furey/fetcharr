@@ -893,6 +893,10 @@ a.icon-link {
   -webkit-touch-callout: none;
 }
 
+body.sheet-open {
+  overflow: hidden;
+}
+
 body.epg-drag-lock,
 body.epg-drag-lock * {
   user-select: none !important;
@@ -1098,22 +1102,31 @@ body.epg-drag-lock * {
   position: fixed;
   inset: 0;
   height: 100vh;
-  height: 100dvh;
+  height: 100svh;
   z-index: 40;
-  background: rgba(26, 22, 17, 0.75);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 1rem;
 }
 
+.epg-modal-backdrop::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  height: 100vh;
+  height: 100lvh;
+  z-index: -1;
+  background: rgba(26, 22, 17, 0.75);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
 .epg-modal {
   width: 100%;
   max-width: 34rem;
   max-height: 85vh;
-  max-height: 85dvh;
+  max-height: 85svh;
   overflow-y: auto;
 }
 
