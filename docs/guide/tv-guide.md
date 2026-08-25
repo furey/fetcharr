@@ -46,6 +46,10 @@ Press the ★ next to a channel in the rail to pin it; the row animates up into 
 
 `⚙ CHANNELS` (in the panel header, next to `⟳ REFRESH`) also hides channels you never watch (a pinned channel can't be hidden; pinning unhides it), sorts the unpinned rest by box order, channel number, or name, and has a `HIDE SD SIMULCASTS` switch: it hides an SD channel only when its HD twin is in the lineup, so SD-only channels stay. The switch applies to the grid and search.
 
+## On a phone
+
+The guide works in the phone browser: the channel rail narrows, programme and channel dialogs open as bottom sheets, and the rail cells drag to reorder pins by touch. On iOS, add Fetcharr to the Home Screen (Share → Add to Home Screen) to run it full-screen without Safari's toolbar; in Safari itself the sheets are sized so their buttons stay above the toolbar.
+
 ## On the dashboard
 
 With the cloud connection configured, the dashboard gains a TV Guide panel: what's on now across your pinned channels (with the start time, minutes remaining, and a progress bar for each programme), what's on next, and the next few scheduled recordings, each marked series or one-off.
