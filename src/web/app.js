@@ -2812,11 +2812,14 @@ const EpgView = {
                   </div>
                 </div>
                 <div v-for="(ch, i) in visibleChannels" :key="ch.id"
-                  :class="['epg-row', { 'epg-pin-divider': isFirstUnpinned(i), pinned: ch.pinned, 'epg-drop-target': dropTargetId === String(ch.id) }]"
-                  @dragover="onPinDragOver(ch, $event)" @drop="onPinDrop(ch, $event)" @dragleave="onPinDragLeave(ch)">
+                  :data-channel-id="ch.id"
+                  :class="['epg-row', { 'epg-pin-divider': isFirstUnpinned(i), pinned: ch.pinned, 'epg-drop-target': dropTargetId === String(ch.id), 'epg-dragging': dragPinId === String(ch.id) }]">
                   <div class="epg-rail-cell" :style="{ width: railPx + 'px' }">
-                    <span v-if="ch.pinned" class="epg-drag" draggable="true" title="Drag to reorder pinned channels"
-                      @dragstart="onPinDragStart(ch, $event)" @dragend="onPinDragEnd">⠿</span>
+                    <span v-if="ch.pinned" class="epg-drag" title="Drag to reorder pinned channels"
+                      @pointerdown="onPinPointerDown(ch, $event)"
+                      @pointermove="onPinPointerMove"
+                      @pointerup="onPinPointerUp"
+                      @pointercancel="onPinPointerCancel">⠿</span>
                     <button type="button" :class="['epg-pin', { pinned: ch.pinned }]"
                       :title="ch.pinned ? 'Unpin channel' : 'Pin channel to the top'"
                       :aria-label="(ch.pinned ? 'Unpin ' : 'Pin ') + ch.name"
@@ -3384,33 +3387,42 @@ const EpgView = {
       .filter((c) => c.pinned)
       .map((c) => String(c.id))
 
-    const onPinDragStart = (ch, e) => {
+    // Pointer-based drag (not HTML5 drag-and-drop) so reordering works with a
+    // finger on iOS as well as a mouse. The handle captures the pointer; rows
+    // are hit-tested by their live bounding boxes on every move.
+    const pinRowUnderPointer = (clientY) => {
+      for (const el of document.querySelectorAll('.epg-row.pinned')) {
+        const box = el.getBoundingClientRect()
+        if (clientY >= box.top && clientY <= box.bottom) return el.dataset.channelId || null
+      }
+      return null
+    }
+
+    const onPinPointerDown = (ch, e) => {
+      if (!ch.pinned) return
+      e.preventDefault()
+      try { e.target.setPointerCapture(e.pointerId) } catch { /* ignore */ }
       dragPinId.value = String(ch.id)
-      e.dataTransfer.effectAllowed = 'move'
-      e.dataTransfer.setData('text/plain', String(ch.id))
+      dropTargetId.value = null
     }
 
-    const onPinDragOver = (ch, e) => {
-      if (!dragPinId.value || !ch.pinned || String(ch.id) === dragPinId.value) return
+    const onPinPointerMove = (e) => {
+      if (!dragPinId.value) return
       e.preventDefault()
-      e.dataTransfer.dropEffect = 'move'
-      dropTargetId.value = String(ch.id)
+      const over = pinRowUnderPointer(e.clientY)
+      dropTargetId.value = over && over !== dragPinId.value ? over : null
     }
 
-    const onPinDragLeave = (ch) => {
-      if (dropTargetId.value === String(ch.id)) dropTargetId.value = null
-    }
-
-    const onPinDrop = async (ch, e) => {
-      if (!dragPinId.value || !ch.pinned) return
-      e.preventDefault()
+    const onPinPointerUp = async () => {
       const from = dragPinId.value
-      const to = String(ch.id)
+      const to = dropTargetId.value
       dragPinId.value = null
       dropTargetId.value = null
-      if (from === to) return
-      const pins = currentPins().filter((id) => id !== from)
-      pins.splice(pins.indexOf(to), 0, from)
+      if (!from || !to || from === to) return
+      const orig = currentPins()
+      const movingDown = orig.indexOf(from) < orig.indexOf(to)
+      const pins = orig.filter((id) => id !== from)
+      pins.splice(pins.indexOf(to) + (movingDown ? 1 : 0), 0, from)
       try {
         await api('PUT', '/api/epg/channel-prefs', { pinned_ids: pins })
         await reloadGuide()
@@ -3419,7 +3431,7 @@ const EpgView = {
       }
     }
 
-    const onPinDragEnd = () => {
+    const onPinPointerCancel = () => {
       dragPinId.value = null
       dropTargetId.value = null
     }
@@ -3545,7 +3557,8 @@ const EpgView = {
       busyId, channelsModal, openChannelsModal, hiddenDraft, toggleHidden,
       pinnedDraft, sortDraft, sortOptions, savingPrefs, saveChannelPrefs,
       togglePin, toggleDraftPin, movePin, draftName, isFirstUnpinned,
-      dropTargetId, onPinDragStart, onPinDragOver, onPinDragLeave, onPinDrop, onPinDragEnd,
+      dropTargetId, dragPinId,
+      onPinPointerDown, onPinPointerMove, onPinPointerUp, onPinPointerCancel,
       channelById, channelName, fmtClock, fmtDayTime, seLabel, ratingLabel, tsOf,
       flashText, flashKind,
     }

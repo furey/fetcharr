@@ -715,7 +715,10 @@ app.get('/api/settings', async (req, res) => {
     fetch_port: fetchPort,
     sync_cron: syncCron,
     sync_cron_effective: getSchedulerExpression(),
-    tz: process.env.TZ || 'UTC',
+    // The guide's day boundaries are computed in the server's local zone, so the
+    // browser must format times in that same zone. Fall back to the zone the
+    // process actually runs in, never a hardcoded UTC.
+    tz: process.env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
     plex_url: plexUrl,
     plex_token_set: Boolean(plexToken),
     plex_tv_section_id: plexTvSectionId,

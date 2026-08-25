@@ -775,8 +775,19 @@ a.icon-link {
   color: #544e47;
   cursor: grab;
   user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
   padding: 0.2rem 0.05rem;
   transition: color 0.15s ease;
+}
+
+.epg-row.epg-dragging {
+  opacity: 0.6;
+}
+
+.epg-row.epg-dragging .epg-drag {
+  color: #ffcd00;
+  cursor: grabbing;
 }
 
 @media (hover: hover) {
@@ -1001,5 +1012,14 @@ a.icon-link {
   input[type="checkbox"].chk {
     width: 1.4rem;
     height: 1.4rem;
+  }
+
+  .epg-drag {
+    padding: 0.6rem 0.4rem;
+    font-size: 0.85rem;
+  }
+
+  .epg-pin {
+    padding: 0.5rem 0.3rem;
   }
 }
