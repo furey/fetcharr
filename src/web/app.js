@@ -3154,6 +3154,13 @@ const EpgView = {
     const modalAction = ref('')
     const busyId = ref(null)
     const channelsModal = ref(false)
+
+    watch([selected, channelsModal], ([program, channels]) => {
+      try { document.body.classList.toggle('sheet-open', Boolean(program || channels)) } catch { /* ignore */ }
+    })
+    onUnmounted(() => {
+      try { document.body.classList.remove('sheet-open') } catch { /* ignore */ }
+    })
     const hiddenDraft = ref(new Set())
     const pinnedDraft = ref([])
     const sortDraft = ref('default')
