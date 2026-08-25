@@ -20,7 +20,7 @@ The guide needs your Fetch cloud login (the same activation code and PIN that [D
 Channels run down the page, time runs across, and a magenta line marks now. The guide opens scrolled to the current half hour.
 
 - **Day chips** switch between today and the next six days; `NOW` and `TONIGHT` jump within the day.
-- **Search** covers the full 7 days across every channel; results record straight from the list.
+- **Search** scopes to the section you are on. On the grid it searches the full 7 days of programmes; on `UPCOMING` and `SERIES` it filters the list as you type. Switching sections clears the query. Every result card opens the programme detail.
 - The **filter box** in the top-left corner narrows the rows by channel name or number as you type.
 - Cell borders show recording state: blue for scheduled, gold for a series recording, pulsing magenta for recording right now. A scheduled episode that comes from a series recording carries a gold dot next to the blue one. The programme airing now on each channel is lifted brighter.
 - The status line above the grid reports the box (online or standby), the scheduled count, and the tuner limit.
@@ -36,7 +36,7 @@ Click a cell to open its detail: synopsis, rating, season and episode, and the c
 - A scheduled programme shows **CANCEL RECORDING** instead. If the episode belongs to a series recording, cancelling asks whether to cancel just that episode or the whole series.
 - A programme whose show carries a series tag but has no episode scheduled yet shows the tag with a **CANCEL SERIES** action.
 
-The **UPCOMING** view lists everything scheduled on the box with cancel buttons, each marked `SERIES` or `ONE-OFF`; **SERIES** lists the box's series tags.
+The **UPCOMING** view lists what will record: the timers the box has set (`SCHEDULED`, marked `SERIES` or `ONE-OFF`), plus the episodes your series tags are expected to catch over the next 7 days (`SERIES` · `EXPECTED`). The box only sets a timer shortly before airtime, so the expected entries are how tomorrow's episodes show up. **SERIES** lists the box's series tags. A card in either view opens the programme detail, where you record or cancel; a series card opens its next airing.
 
 A series tag belongs to one channel. An SD channel and its HD simulcast are separate channels to Fetch, so the same show appears once per channel in search, and a series set on the HD channel does not cover the SD airings; the channel logos on each row show which is which.
 
@@ -44,7 +44,7 @@ A series tag belongs to one channel. An SD channel and its HD simulcast are sepa
 
 Press the ★ next to a channel in the rail to pin it; the row animates up into the pinned block. Pinned channels sit at the top of the grid in your order, with a gold tint; drag a pinned row by any part of its rail cell to reorder (a ghost of the row follows your pointer), or use the arrows in the `CHANNELS` dialog. When the pinned block scrolls out of view, a `↑ PINNED` chip appears; click it to jump back to the top.
 
-`CHANNELS` also hides channels you never watch (a pinned channel can't be hidden; pinning unhides it) and sorts the unpinned rest by box order, channel number, or name.
+`⚙ CHANNELS` (in the panel header, next to `⟳ REFRESH`) also hides channels you never watch (a pinned channel can't be hidden; pinning unhides it), sorts the unpinned rest by box order, channel number, or name, and has a `HIDE SD SIMULCASTS` switch: it hides an SD channel only when its HD twin is in the lineup, so SD-only channels stay. The switch applies to the grid and search.
 
 ## On the dashboard
 
