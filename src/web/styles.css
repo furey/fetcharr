@@ -706,6 +706,7 @@ a.icon-link {
 .epg-scroll {
   overflow: auto;
   max-height: 70vh;
+  max-height: 70dvh;
   border: 1px solid #3d3829;
   border-radius: 0.4rem;
   background: rgba(26, 22, 17, 0.45);
@@ -851,11 +852,11 @@ a.icon-link {
 
 .epg-modal-art {
   width: 100%;
-  max-height: 9rem;
-  object-fit: cover;
+  height: 9rem;
+  object-fit: contain;
   border-radius: 0.3rem;
   border: 1px solid rgba(61, 56, 41, 0.85);
-  background: rgba(26, 22, 17, 0.6);
+  background: #fffcfb;
 }
 
 .epg-rail-logo {
@@ -1096,6 +1097,8 @@ body.epg-drag-lock * {
 .epg-modal-backdrop {
   position: fixed;
   inset: 0;
+  height: 100vh;
+  height: 100dvh;
   z-index: 40;
   background: rgba(26, 22, 17, 0.75);
   backdrop-filter: blur(4px);
@@ -1110,6 +1113,7 @@ body.epg-drag-lock * {
   width: 100%;
   max-width: 34rem;
   max-height: 85vh;
+  max-height: 85dvh;
   overflow-y: auto;
 }
 
@@ -1140,6 +1144,7 @@ body.epg-drag-lock * {
 @media (max-width: 767px) {
   .epg-scroll {
     max-height: 65vh;
+    max-height: 65dvh;
   }
 
   .epg-track {
@@ -1156,7 +1161,7 @@ body.epg-drag-lock * {
   }
 
   .epg-modal-art {
-    max-height: 6.5rem;
+    height: 6.5rem;
   }
 
   .epg-modal-backdrop {
