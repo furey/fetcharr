@@ -2968,7 +2968,7 @@ const EpgView = {
         <section class="panel epg-modal">
           <header class="panel-header">
             <span class="panel-title">{{ selected.program.title }}</span>
-            <button type="button" class="btn btn-sm btn-icon" @click="closeModal" aria-label="Close">✕</button>
+            <button type="button" class="btn btn-sm btn-icon epg-modal-x" @click="closeModal" aria-label="Close">✕</button>
           </header>
           <div class="panel-body space-y-4">
             <img v-if="modalChannel?.thumb" class="epg-modal-art" :src="'/api/epg/artwork/' + modalChannel.id"
@@ -3008,6 +3008,7 @@ const EpgView = {
               </div>
             </div>
             <div class="flex flex-wrap items-center justify-end gap-2 pt-1">
+              <button type="button" class="btn btn-sm epg-modal-close mr-auto" @click="closeModal" aria-label="Close">✕ CLOSE</button>
               <template v-if="cellState(selected.program) === 'scheduled' || cellState(selected.program) === 'recording'">
                 <template v-if="isSeriesScheduled(selected.program) && cancelChoice">
                   <span class="text-xs font-mono text-ink-mute">This is part of a series recording — cancel what?</span>
@@ -3057,7 +3058,7 @@ const EpgView = {
         <section class="panel epg-modal">
           <header class="panel-header">
             <span class="panel-title">CHANNELS</span>
-            <button type="button" class="btn btn-sm btn-icon" @click="channelsModal = false" aria-label="Close">✕</button>
+            <button type="button" class="btn btn-sm btn-icon epg-modal-x" @click="channelsModal = false" aria-label="Close">✕</button>
           </header>
           <div class="panel-body space-y-5">
             <div>
