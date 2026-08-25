@@ -56,18 +56,18 @@ const EPG_TITLES = [
 ]
 
 const epgChannels = [
-  { number: 2, name: 'ABC TV', hd: true, pinned: true },
-  { number: 3, name: 'SBS', hd: true, pinned: true },
-  { number: 10, name: '10', hd: true, pinned: false },
-  { number: 21, name: 'ABC TV Plus', hd: false, pinned: false },
-  { number: 22, name: 'ABC ME', hd: false, pinned: false },
-  { number: 24, name: 'ABC News', hd: true, pinned: false },
-  { number: 31, name: 'SBS Viceland', hd: true, pinned: false },
-  { number: 33, name: 'SBS Food', hd: false, pinned: false },
-  { number: 70, name: 'Seven', hd: true, pinned: false },
-  { number: 72, name: '7two', hd: false, pinned: false },
-  { number: 90, name: 'Nine', hd: true, pinned: false },
-  { number: 92, name: '9Gem', hd: false, pinned: false },
+  { number: 2, name: 'ABC TV', hd: true, pinned: true, logoId: 10431733 },
+  { number: 3, name: 'SBS', hd: true, pinned: true, logoId: 10251831 },
+  { number: 10, name: '10', hd: true, pinned: false, logoId: 10085459 },
+  { number: 21, name: 'ABC Entertains', hd: false, pinned: false, logoId: 20411316 },
+  { number: 22, name: 'ABC Family', hd: false, pinned: false, logoId: 10284791 },
+  { number: 24, name: 'ABC NEWS', hd: true, pinned: false, logoId: 10391135 },
+  { number: 31, name: 'SBS2', hd: true, pinned: false, logoId: 10431775 },
+  { number: 33, name: 'SBS Food', hd: false, pinned: false, logoId: 10431491 },
+  { number: 70, name: '7', hd: true, pinned: false, logoId: 10431611 },
+  { number: 72, name: '7TWO', hd: false, pinned: false, logoId: 10410798 },
+  { number: 90, name: 'Nine', hd: true, pinned: false, logoId: 10018671 },
+  { number: 92, name: '9Gem', hd: false, pinned: false, logoId: 10391134 },
 ].map((c, i) => ({
   id: 100 + i, epgId: 1000 + i, ...c, hidden: false, recordable: true,
   logo: 'stub', thumb: 'stub', description: c.name,
@@ -263,14 +263,25 @@ const run = async () => {
     })
   }
 
-  await context.route('**/api/epg/logo/**', (route) => {
+  const realImage = async (route, kind) => {
     const id = route.request().url().split('/').pop()
+    const ch = epgChannels.find((c) => String(c.id) === String(id))
+    if (ch?.logoId) {
+      try {
+        const res = await context.request.get(`${BASE}/api/epg/${kind}/${ch.logoId}`)
+        if (res.ok()) {
+          return route.fulfill({
+            status: 200,
+            contentType: res.headers()['content-type'] || 'image/png',
+            body: await res.body(),
+          })
+        }
+      } catch {}
+    }
     return route.fulfill({ status: 200, contentType: 'image/svg+xml', body: logoSvg(id) })
-  })
-  await context.route('**/api/epg/artwork/**', (route) => {
-    const id = route.request().url().split('/').pop()
-    return route.fulfill({ status: 200, contentType: 'image/svg+xml', body: logoSvg(id) })
-  })
+  }
+  await context.route('**/api/epg/logo/**', (route) => realImage(route, 'logo'))
+  await context.route('**/api/epg/artwork/**', (route) => realImage(route, 'artwork'))
 
   const page = await context.newPage()
   const startedAt = Date.now()
