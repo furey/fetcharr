@@ -199,7 +199,7 @@ const useFlash = () => {
 const FLASH_DEFAULT_MS = 4500
 const SYNC_FLASH_SAFETY_MS = 60_000
 
-const ROUTES = ['dashboard', 'shows', 'syncs', 'recordings', 'settings', 'welcome']
+const ROUTES = ['dashboard', 'guide', 'shows', 'syncs', 'recordings', 'settings', 'welcome']
 const WELCOME_DISMISSED_KEY = 'fetcharr.welcomeDismissed'
 const DEFAULT_ROUTE = 'dashboard'
 
@@ -344,6 +344,19 @@ const within7Days = (s) => {
   return Number.isFinite(t) && (Date.now() - t) < 7 * 24 * 60 * 60 * 1000
 }
 
+const fmtClockTz = (ms) => new Intl.DateTimeFormat('en-AU', {
+  timeZone: tz.value, hour: 'numeric', minute: '2-digit',
+}).format(new Date(ms)).replace(/\s/g, '').toLowerCase()
+
+const tsOfMs = (v) => {
+  if (v == null) return 0
+  if (typeof v === 'number') return v
+  const n = Number(v)
+  if (Number.isFinite(n)) return n
+  const t = new Date(v).getTime()
+  return Number.isFinite(t) ? t : 0
+}
+
 const DashboardView = {
   template: `
     <div class="view-reveal space-y-6">
@@ -407,6 +420,55 @@ const DashboardView = {
         </article>
       </section>
 
+      <section v-if="cloudConfigured && guideOk" class="panel">
+        <header class="panel-header">
+          <span class="panel-title">TV GUIDE</span>
+          <a href="#/guide" class="text-xs font-mono uppercase tracking-[0.16em]">Open guide →</a>
+        </header>
+        <div class="panel-body space-y-5">
+          <div v-if="onNow.length">
+            <div class="text-xs font-mono uppercase tracking-[0.16em] text-ink-dim mb-3">On now · pinned channels</div>
+            <div class="space-y-3">
+            <div v-for="e in onNow" :key="e.channel.id" class="flex items-center gap-3 md:gap-4">
+              <img v-if="e.channel.hasLogo" class="epg-rail-logo shrink-0" :src="'/api/epg/logo/' + e.channel.id" alt=""
+                @error="$event.target.style.display = 'none'" />
+              <span class="font-mono text-xs text-ink-dim w-20 md:w-28 shrink-0 truncate" :title="e.channel.name">{{ e.channel.name }}</span>
+              <div class="flex-1 min-w-0">
+                <template v-if="e.now">
+                  <span class="block truncate">
+                    <span class="text-sm font-semibold text-ink mr-3">{{ e.now.title }}</span>
+                    <span class="font-mono text-xs text-ink-dim">{{ onNowMeta(e.now) }}</span>
+                  </span>
+                  <div class="progress" style="margin-top: 0.25rem; max-width: none;">
+                    <div class="progress-track">
+                      <div class="progress-fill" :style="{ width: onNowPercent(e.now) + '%' }"></div>
+                    </div>
+                  </div>
+                </template>
+                <span v-else class="text-sm text-ink-mute">off air</span>
+              </div>
+              <span v-if="e.next" class="hidden sm:block font-mono text-xs text-ink-dim min-w-0 max-w-[16rem] truncate">
+                next: <span class="text-xs font-semibold font-sans text-ink">{{ e.next.title }}</span> {{ fmtClockTz(e.next.start) }}
+              </span>
+            </div>
+            </div>
+          </div>
+          <p v-else class="text-xs text-ink-dim">
+            Pin channels in the <a href="#/guide">TV Guide</a> (★ in the channel rail) to see what's on now.
+          </p>
+          <div v-if="guideUpcoming.length">
+            <div class="text-xs font-mono uppercase tracking-[0.16em] text-ink-dim mb-3">Next recordings</div>
+            <div class="space-y-2">
+              <p v-for="r in guideUpcoming" :key="r.id" class="flex items-center gap-2.5 font-mono text-xs text-ink-dim min-w-0">
+                <span class="led-dot sm shrink-0" :style="{ background: isSeriesRec(r) ? '#e2b03c' : '#009be4' }"></span>
+                <span class="truncate min-w-0"><span class="text-ink">{{ r.name }}</span>
+                · {{ fmtClockTz(tsOfMs(r.startDate)) }}<template v-if="r.episodeTitle"> · {{ r.episodeTitle }}</template> · {{ isSeriesRec(r) ? 'series' : 'one-off' }}</span>
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section class="panel">
         <header class="panel-header">
           <span class="panel-title">RECENT SYNCS</span>
@@ -452,8 +514,44 @@ const DashboardView = {
     const plexConfigured = ref(false)
     const cloudTerminalId = ref('')
     const cloudConfigured = ref(false)
+    const onNow = ref([])
+    const guideUpcoming = ref([])
+    const guideSeriesLinks = ref(new Set())
+    const guideOk = ref(true)
 
     const lastSync = computed(() => recentSyncs.value[0] || null)
+
+    const onNowPercent = (p) => {
+      const span = p.end - p.start
+      if (span <= 0) return 0
+      return Math.min(100, Math.max(0, Math.round(((Date.now() - p.start) / span) * 100)))
+    }
+
+    const onNowMeta = (p) => {
+      const mins = Math.max(0, Math.ceil((p.end - Date.now()) / 60_000))
+      return `${fmtClockTz(p.start)} · ${mins} min${mins === 1 ? '' : 's'} remaining`
+    }
+
+    const loadGuidePanel = async () => {
+      if (!cloudConfigured.value) return
+      try {
+        const r = await api('GET', '/api/epg/now')
+        onNow.value = r.entries || []
+        guideOk.value = true
+      } catch {
+        guideOk.value = false
+        return
+      }
+      const s = await api('GET', '/api/epg/state').catch(() => null)
+      guideSeriesLinks.value = new Set((s?.seriesTags || []).map((t) => String(t.seriesLinkId ?? t.id)))
+      guideUpcoming.value = (s?.futureRecordings || [])
+        .filter((r) => !r.pendingDelete)
+        .sort((a, b) => tsOfMs(a.startDate) - tsOfMs(b.startDate))
+        .slice(0, 3)
+    }
+
+    const isSeriesRec = (r) =>
+      r?.seriesLinkId != null && guideSeriesLinks.value.has(String(r.seriesLinkId))
 
     const plexLabel = computed(() => plexConfigured.value ? 'Connected' : 'Not configured')
     const plexClass = computed(() => plexConfigured.value ? 'text-plex-yellow' : 'text-ink-dim')
@@ -485,6 +583,7 @@ const DashboardView = {
         && settings.fetch_cloud_terminal_id,
       )
       cloudTerminalId.value = settings.fetch_cloud_terminal_id || ''
+      loadGuidePanel()
     }
 
     const syncNow = async () => {
@@ -518,7 +617,8 @@ const DashboardView = {
       syncStatus, lastSync, recentSyncs,
       showCount, showEnabledCount, recordingsTotal, recordings7dCount,
       plexLabel, plexClass, plexHost,
-      cloudLabel, cloudClass, cloudTerminalId,
+      cloudLabel, cloudClass, cloudTerminalId, cloudConfigured,
+      onNow, guideUpcoming, guideOk, onNowPercent, onNowMeta, isSeriesRec, fmtClockTz, tsOfMs,
       starting, syncNow, fmtTime,
       flashText, flashKind,
     }
@@ -530,7 +630,7 @@ const ShowsView = {
     <div class="view-reveal space-y-6">
       <section class="panel">
         <header class="panel-header">
-          <span class="panel-title">SHOWS · {{ shows.length }}</span>
+          <span class="panel-title">TRACKED SHOWS · {{ shows.length }}</span>
           <span v-if="flashText" :class="['status-readout', flashKind]">{{ flashText }}</span>
         </header>
         <div class="panel-body">
@@ -615,14 +715,14 @@ const ShowsView = {
             </article>
           </div>
           <p v-else class="text-ink-dim text-sm">
-            No shows yet — add one below to start tracking a show.
+            No tracked shows yet — add one below to start tracking.
           </p>
         </div>
       </section>
 
       <section class="panel">
         <header class="panel-header">
-          <span class="panel-title">ADD SHOW</span>
+          <span class="panel-title">TRACK NEW SHOW</span>
         </header>
         <form class="panel-body" @submit.prevent="add">
           <div class="grid gap-4 md:grid-cols-2">
@@ -678,7 +778,7 @@ const ShowsView = {
           </div>
           <div class="flex items-center gap-3 mt-2">
             <button type="submit" class="btn btn-primary" :disabled="adding">
-              {{ adding ? 'ADDING…' : '＋ ADD SHOW' }}
+              {{ adding ? 'ADDING…' : '＋ TRACK SHOW' }}
             </button>
           </div>
         </form>
@@ -1037,7 +1137,7 @@ const RecordingsView = {
     <div class="view-reveal space-y-6">
       <section class="panel">
         <header class="panel-header">
-          <span class="panel-title">RECORDINGS · {{ rangeLabel }} of {{ total }}</span>
+          <span class="panel-title">TRACKED RECORDINGS · {{ rangeLabel }} of {{ total }}</span>
           <div class="flex flex-wrap items-center gap-3">
             <span v-if="flashText" :class="['status-readout', flashKind]">{{ flashText }}</span>
             <button type="button" class="btn btn-sm btn-danger" @click="purgeDeleted"
@@ -1565,11 +1665,13 @@ const SettingsView = {
         <section class="panel">
           <header class="panel-header">
             <span class="panel-title">FETCH CLOUD ACCOUNT</span>
-            <span class="text-xs font-mono text-ink-dim">required for delete-from-Fetch</span>
+            <span class="text-xs font-mono text-ink-dim">powers the TV Guide + delete-from-Fetch</span>
           </header>
           <div class="panel-body space-y-4">
             <p class="text-sm text-ink-dim leading-relaxed">
-              Fetch firmware blocks LAN deletion. To delete recordings after they sync, Fetcharr signs into Fetch's cloud over the same WebSocket the Fetch mobile app uses. Sign in at
+              Two features sign into Fetch's cloud the way the Fetch mobile app does: the
+              <a href="#/guide">TV Guide</a> (browse 7 days of programmes and schedule recordings from here) and
+              delete-from-Fetch after a sync (Fetch firmware blocks LAN deletion). Sign in at
               <a href="https://www.fetchtv.com.au/manage/account/summary" target="_blank" rel="noopener noreferrer">fetchtv.com.au/manage/account/summary</a>
               — under <em>Your Service → Boxes</em> each box is listed as <em>STB 1</em>, <em>STB 2</em>, etc., and the value next to it (e.g. <code>nqp…</code>) is the activation code. The PIN is the account PIN you set when you first activated Fetch.
             </p>
@@ -2218,7 +2320,7 @@ const WelcomeView = {
 
           <div v-if="step === 5" class="space-y-4">
             <p class="text-ink text-sm leading-relaxed">
-              <strong>Optional.</strong> Sign in to Fetch's cloud so Fetcharr can delete recordings from the box after they sync. Skip if you don't want auto-delete.
+              <strong>Optional, but worth it.</strong> Signing in to Fetch's cloud unlocks the <strong>TV Guide</strong> — browse 7 days of programmes and schedule recordings from your browser — and lets Fetcharr delete recordings from the box after they sync.
             </p>
             <p class="text-ink-dim text-xs leading-relaxed">
               Get your activation code from
@@ -2597,8 +2699,1123 @@ const WelcomeView = {
   },
 }
 
+const EPG_PX_PER_MIN = 3
+const EPG_RAIL_DEFAULT_PX = 148
+const EPG_RAIL_MIN_PX = 90
+const EPG_RAIL_MAX_PX = 260
+const EPG_RAIL_KEY = 'fetcharr.epgRailPx'
+const EPG_DRAG_THRESHOLD_PX = 6
+const EPG_DAY_MIN = 24 * 60
+const EPG_STATE_POLL_MS = 60_000
+const EPG_SEARCH_DEBOUNCE_MS = 300
+const EPG_LEAD_OPTIONS = [0, 1, 3, 5, 10, 15]
+const EPG_LAG_OPTIONS = [0, 5, 10, 15, 30, 60]
+const EPG_KEEP_OPTIONS = [
+  { value: 0, label: 'ALL EPISODES' },
+  { value: 5, label: 'KEEP 5' },
+  { value: 10, label: 'KEEP 10' },
+]
+
+const EpgView = {
+  template: `
+    <div class="view-reveal space-y-6">
+      <section class="panel">
+        <header class="panel-header">
+          <span class="panel-title">GUIDE<template v-if="mode === 'guide'"> · {{ dayTitle }}</template><template v-else> · {{ mode.toUpperCase() }}</template></span>
+          <div class="flex flex-wrap items-center gap-3">
+            <span v-if="flashText" :class="['status-readout', flashKind]">{{ flashText }}</span>
+            <button type="button" class="btn btn-sm" @click="manualRefresh" :disabled="loading">↻ REFRESH</button>
+          </div>
+        </header>
+        <div class="panel-body space-y-4">
+          <div class="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-center md:gap-x-6">
+            <div class="chip-row md:flex-wrap">
+              <button v-for="m in modes" :key="m.key" type="button"
+                :class="['btn', 'btn-sm', mode === m.key ? 'btn-primary' : '']"
+                @click="setMode(m.key)">{{ m.label }}</button>
+            </div>
+            <div class="flex-1 min-w-[12rem] md:max-w-xs">
+              <input v-model="searchQ" type="search" class="field-input" placeholder="Search the next 7 days…"
+                style="padding-top: 0.35rem; padding-bottom: 0.35rem;" />
+            </div>
+            <button type="button" class="btn btn-sm" @click="openChannelsModal" :disabled="!guide">CHANNELS</button>
+          </div>
+
+          <template v-if="searchActive">
+            <p class="text-xs font-mono text-ink-mute">
+              {{ searching ? 'Searching…' : searchResults.length + ' result' + (searchResults.length === 1 ? '' : 's') + ' for “' + searchQ.trim() + '”' }}
+            </p>
+            <div class="space-y-3">
+              <article v-for="p in searchResults" :key="p.program_id + '-' + p.start" class="deck-card space-y-1.5">
+                <div class="flex items-start justify-between gap-3">
+                  <button type="button" class="deck-card-title text-left btn-reset" style="background:none;border:none;padding:0;cursor:pointer;color:inherit;font:inherit"
+                    @click="openProgram(p, channelById(p.channelId))">{{ p.title }}</button>
+                  <span class="flex items-center gap-1.5 shrink-0">
+                    <span v-if="isSeriesScheduled(p)" class="pill done">SERIES</span>
+                    <span v-if="cellState(p) === 'recording'" class="pill recording">RECORDING</span>
+                    <span v-else-if="cellState(p) === 'scheduled'" class="pill downloading">SCHEDULED</span>
+                    <span v-else-if="cellState(p) === 'series'" class="pill done">SERIES</span>
+                  </span>
+                </div>
+                <p class="deck-card-meta">
+                  {{ p.channelName }} · {{ fmtDayTime(p.start) }}–{{ fmtClock(p.end) }}<template v-if="p.episode_title"> · {{ p.episode_title }}</template>
+                </p>
+              </article>
+              <p v-if="!searching && searchResults.length === 0" class="text-ink-dim text-sm">Nothing upcoming matches.</p>
+            </div>
+          </template>
+
+          <template v-else-if="mode === 'guide'">
+            <div class="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-center md:gap-x-6">
+              <div class="flex items-center gap-2 min-w-0">
+                <span class="text-xs font-mono uppercase tracking-[0.16em] text-ink-dim">DAY</span>
+                <div class="chip-row md:flex-wrap">
+                  <button v-for="d in dayChips" :key="d.day" type="button"
+                    :class="['btn', 'btn-sm', day === d.day ? 'btn-primary' : '']"
+                    @click="setDay(d.day)">{{ d.label }}</button>
+                </div>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="text-xs font-mono uppercase tracking-[0.16em] text-ink-dim">JUMP</span>
+                <div class="chip-row">
+                  <button type="button" class="btn btn-sm" @click="jumpNow">NOW</button>
+                  <button type="button" class="btn btn-sm" @click="jumpTonight">TONIGHT</button>
+                </div>
+              </div>
+            </div>
+            <p v-if="stateLine" class="text-xs font-mono text-ink-mute">{{ stateLine }}</p>
+            <p v-if="guide?.stale" class="text-xs font-mono text-plex-yellow">
+              Showing the cached guide — Fetch cloud is rate limiting; it refreshes automatically when the limit lifts.
+            </p>
+            <div v-if="needsSetup" class="space-y-5">
+              <div class="relative rounded overflow-hidden border border-hairline max-w-3xl">
+                <img src="/img/guide-preview.jpg" alt="A preview of the TV Guide grid"
+                  class="block w-full opacity-80" />
+                <div class="absolute inset-0 bg-gradient-to-t from-surface-deep via-transparent to-transparent"></div>
+                <p class="absolute bottom-3 left-4 right-4 text-sm font-mono text-ink tracking-[0.06em]">
+                  7 days of programmes · record from the browser · pinned favourite channels
+                </p>
+              </div>
+              <p class="text-sm text-ink max-w-2xl">
+                This is the TV Guide — browse the week, schedule and cancel recordings, and manage
+                series, no Fetch mobile app needed. It just needs your Fetch cloud login (the same
+                login the official app uses).
+              </p>
+              <ol class="list-decimal pl-5 space-y-2 text-sm text-ink-dim max-w-2xl">
+                <li>
+                  Sign in at
+                  <a href="https://www.fetchtv.com.au/manage/account/summary" target="_blank" rel="noopener noreferrer">fetchtv.com.au/manage/account/summary</a>
+                  — under <em>Your Service → Boxes</em>, the value next to your box is the
+                  <strong class="text-ink">activation code</strong>. The
+                  <strong class="text-ink">PIN</strong> is the account PIN you set when you first
+                  activated Fetch.
+                </li>
+                <li>
+                  Enter both under <a href="#/settings">Settings</a> → Fetch Cloud Account, press
+                  <code>TEST CONNECTION</code>, then come back here.
+                </li>
+              </ol>
+              <div class="flex items-center gap-2">
+                <a href="#/settings" class="btn btn-sm btn-primary no-underline">OPEN SETTINGS</a>
+                <button type="button" class="btn btn-sm" @click="loadDay(day, { force: true })">RETRY</button>
+              </div>
+            </div>
+            <div v-else-if="error" class="space-y-3">
+              <p class="text-sm font-mono text-signal-magenta-hi">{{ error }}</p>
+              <p class="text-xs text-ink-dim">
+                Check the Fetch cloud connection in <a href="#/settings">Settings</a>, and that the
+                box is online (visible in the Fetch mobile app).
+              </p>
+              <button type="button" class="btn btn-sm" @click="loadDay(day, { force: true })">RETRY</button>
+            </div>
+            <div v-else-if="loading && !guide" class="text-ink-dim font-mono text-sm">▰▰ loading guide…</div>
+            <div v-else-if="guide" class="relative" :style="{ '--epg-rail-px': railPx + 'px' }">
+              <button v-if="pinsOffscreen" type="button" class="epg-pinned-chip" @click="scrollRailTop">↑ {{ pinnedCount }} PINNED</button>
+              <div class="epg-scroll" ref="scrollEl">
+              <div class="epg-canvas" :style="{ width: 'calc(var(--epg-rail-px) + ' + trackWidth + 'px)' }">
+                <div class="epg-ruler">
+                  <div class="epg-ruler-corner">
+                    <input v-model="railFilter" type="search" class="epg-corner-filter"
+                      placeholder="filter…" aria-label="Filter channels by number or name" />
+                    <div class="epg-rail-resizer" title="Drag to resize the channel rail"
+                      :style="{ height: railStripH + 'px' }"
+                      @pointerdown="onRailResizeDown"
+                      @pointermove="onRailResizeMove"
+                      @pointerup="onRailResizeUp"
+                      @pointercancel="onRailResizeUp"></div>
+                  </div>
+                  <div class="epg-ruler-track" :style="{ width: trackWidth + 'px' }">
+                    <span v-for="t in ticks" :key="t.x" class="epg-tick" :style="{ left: t.x + 'px' }">{{ t.label }}</span>
+                  </div>
+                </div>
+                <transition-group name="epg-rows" tag="div">
+                <div v-for="ch in visibleChannels" :key="ch.id"
+                  v-show="rowShown(ch)"
+                  v-memo="[ch, nowMs, state, railNumWidth, rowShown(ch), firstUnpinnedId === String(ch.id), dropTargetId === String(ch.id), dragPinId === String(ch.id)]"
+                  :data-channel-id="ch.id"
+                  :class="['epg-row', { 'epg-pin-divider': firstUnpinnedId === String(ch.id), pinned: ch.pinned, 'epg-drop-target': dropTargetId === String(ch.id), 'epg-dragging': dragPinId === String(ch.id) }]">
+                  <div class="epg-rail-cell"
+                    :title="ch.pinned ? 'Drag to reorder pinned channels' : null"
+                    @pointerdown="onPinPointerDown(ch, $event)"
+                    @pointermove="onPinPointerMove"
+                    @pointerup="onPinPointerUp"
+                    @pointercancel="onPinPointerCancel">
+                    <button type="button" :class="['epg-pin', { pinned: ch.pinned }]"
+                      :title="ch.pinned ? 'Unpin channel' : 'Pin channel to the top'"
+                      :aria-label="(ch.pinned ? 'Unpin ' : 'Pin ') + ch.name"
+                      @click="togglePin(ch)">★</button>
+                    <span class="epg-rail-num">{{ railNum(ch) }}</span>
+                    <img v-if="ch.logo" class="epg-rail-logo" :src="'/api/epg/logo/' + ch.id" alt="" loading="lazy" @error="$event.target.style.display = 'none'" />
+                    <span class="epg-rail-name">{{ ch.name }}</span>
+                  </div>
+                  <div class="epg-track" :style="{ width: trackWidth + 'px' }">
+                    <button v-for="p in guide.programs[ch.id]" :key="p.program_id + '-' + p.start" type="button"
+                      :class="['epg-cell', cellState(p), { past: p.end <= nowMs, 'on-now': p.start <= nowMs && p.end > nowMs }]"
+                      :style="cellStyle(p)" :title="cellTitle(p)"
+                      @click="openProgram(p, ch)">
+                      <template v-if="cellWidth(p) > 40">
+                        <span class="epg-cell-title">{{ p.title }}</span>
+                        <span class="epg-cell-meta">
+                          <span v-if="cellState(p) === 'recording'" class="led-dot sm live"></span>
+                          <span v-else-if="cellState(p) === 'scheduled'" class="led-dot sm" style="background:#009be4"></span>
+                          <span v-else-if="cellState(p) === 'series'" class="led-dot sm" style="background:#e2b03c"></span>
+                          <span v-if="isSeriesScheduled(p)" class="led-dot sm" style="background:#e2b03c"></span>
+                          {{ fmtClock(p.start) }}
+                        </span>
+                      </template>
+                    </button>
+                  </div>
+                </div>
+                </transition-group>
+                <div v-if="day === 0 && nowX != null" class="epg-nowline" :style="{ left: 'calc(var(--epg-rail-px) + ' + nowX + 'px)' }"></div>
+              </div>
+              </div>
+            </div>
+          </template>
+
+          <template v-else-if="mode === 'upcoming'">
+            <p v-if="stateError" class="text-sm font-mono text-signal-magenta-hi">{{ stateError }}</p>
+            <div v-else-if="!state" class="text-ink-dim font-mono text-sm">▰▰ contacting box…</div>
+            <template v-else>
+              <p v-if="upcoming.length === 0" class="text-ink-dim text-sm">Nothing scheduled on the box.</p>
+              <div v-else class="space-y-3">
+                <article v-for="r in upcoming" :key="r.id" class="deck-card space-y-1.5">
+                  <div class="flex items-start justify-between gap-3">
+                    <span class="deck-card-title">{{ r.name }}</span>
+                    <span class="flex items-center gap-1.5 shrink-0">
+                      <span v-if="isSeriesRec(r)" class="pill done">SERIES</span>
+                      <span v-else class="pill">ONE-OFF</span>
+                      <span v-if="isActiveRecording(r)" class="pill recording">RECORDING</span>
+                      <span v-else class="pill downloading">SCHEDULED</span>
+                    </span>
+                  </div>
+                  <p class="deck-card-meta">
+                    {{ channelName(r.channelId) }} · {{ fmtDayTime(tsOf(r.startDate)) }}–{{ fmtClock(tsOf(r.endDate)) }}<template v-if="r.episodeTitle"> · {{ r.episodeTitle }}</template>
+                  </p>
+                  <div class="flex items-center justify-end pt-1">
+                    <button type="button" class="btn btn-sm btn-danger" @click="cancelUpcoming(r)"
+                      :disabled="busyId === r.programId">{{ busyId === r.programId ? '…' : '⨯ CANCEL' }}</button>
+                  </div>
+                </article>
+              </div>
+            </template>
+          </template>
+
+          <template v-else>
+            <p v-if="stateError" class="text-sm font-mono text-signal-magenta-hi">{{ stateError }}</p>
+            <div v-else-if="!state" class="text-ink-dim font-mono text-sm">▰▰ contacting box…</div>
+            <template v-else>
+              <p v-if="seriesTags.length === 0" class="text-ink-dim text-sm">No series recordings set on the box.</p>
+              <div v-else class="space-y-3">
+                <article v-for="t in seriesTags" :key="seriesKey(t)" class="deck-card space-y-1.5">
+                  <div class="flex items-start justify-between gap-3">
+                    <span class="deck-card-title">{{ t.name || t.title || seriesKey(t) }}</span>
+                    <span class="pill done">SERIES</span>
+                  </div>
+                  <p class="deck-card-meta">{{ channelName(t.channelId) }}<template v-if="t.episodesToKeep"> · keep {{ t.episodesToKeep }}</template></p>
+                  <div class="flex items-center justify-end pt-1">
+                    <button type="button" class="btn btn-sm btn-danger" @click="cancelSeriesTag(t)"
+                      :disabled="busyId === seriesKey(t)">{{ busyId === seriesKey(t) ? '…' : '⨯ CANCEL SERIES' }}</button>
+                  </div>
+                </article>
+              </div>
+            </template>
+          </template>
+        </div>
+      </section>
+
+      <teleport to="body">
+      <div v-if="selected" class="epg-modal-backdrop" @click.self="closeModal">
+        <section class="panel epg-modal">
+          <header class="panel-header">
+            <span class="panel-title">{{ selected.program.title }}</span>
+            <button type="button" class="btn btn-sm btn-icon" @click="closeModal" aria-label="Close">✕</button>
+          </header>
+          <div class="panel-body space-y-4">
+            <img v-if="modalChannel?.thumb" class="epg-modal-art" :src="'/api/epg/artwork/' + modalChannel.id"
+              alt="" @error="$event.target.style.display = 'none'" />
+            <p class="text-sm font-mono text-ink-dim">
+              {{ selected.channel?.name || channelName(selected.program.channelId) }} ·
+              {{ fmtDayTime(selected.program.start) }}–{{ fmtClock(selected.program.end) }}
+              <template v-if="ratingLabel(selected.program)"> · {{ ratingLabel(selected.program) }}</template>
+              <template v-if="seLabel(selected.program)"> · {{ seLabel(selected.program) }}</template>
+            </p>
+            <p v-if="selected.program.episode_title" class="text-sm text-ink">{{ selected.program.episode_title }}</p>
+            <p v-if="selected.program.synopsis" class="text-sm text-ink-dim leading-relaxed">{{ selected.program.synopsis }}</p>
+            <p v-if="cellState(selected.program) === 'scheduled' || cellState(selected.program) === 'recording'" class="text-xs font-mono text-signal-blue-hi">
+              {{ cellState(selected.program) === 'recording' ? 'Recording now on the box' : 'Scheduled to record on the box' }}{{ isSeriesScheduled(selected.program) ? ' (part of a series recording).' : ' (one-off recording).' }}
+            </p>
+            <div v-if="canRecord" class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="field-label">START EARLY</label>
+                <select v-model.number="leadTime" class="field-input">
+                  <option v-for="m in leadOptions" :key="m" :value="m">{{ m }} MIN</option>
+                </select>
+              </div>
+              <div>
+                <label class="field-label">RUN LATE</label>
+                <select v-model.number="lagTime" class="field-input">
+                  <option v-for="m in lagOptions" :key="m" :value="m">{{ m }} MIN</option>
+                </select>
+              </div>
+              <div v-if="selected.program.series_link" class="col-span-2">
+                <label class="field-label">SERIES · EPISODES TO KEEP</label>
+                <select v-model.number="episodesToKeep" class="field-input">
+                  <option v-for="o in keepOptions" :key="o.value" :value="o.value">{{ o.label }}</option>
+                </select>
+              </div>
+            </div>
+            <div class="flex flex-wrap items-center justify-end gap-2 pt-1">
+              <template v-if="cellState(selected.program) === 'scheduled' || cellState(selected.program) === 'recording'">
+                <template v-if="isSeriesScheduled(selected.program) && cancelChoice">
+                  <span class="text-xs font-mono text-ink-mute">This is part of a series recording — cancel what?</span>
+                  <button type="button" class="btn btn-sm btn-danger" @click="cancelSelected" :disabled="modalBusy">
+                    {{ modalBusy ? '…' : '⨯ THIS EPISODE' }}
+                  </button>
+                  <button type="button" class="btn btn-sm btn-danger" @click="cancelSelectedSeries" :disabled="modalBusy">
+                    {{ modalBusy ? '…' : '⨯ WHOLE SERIES' }}
+                  </button>
+                  <button type="button" class="btn btn-sm" @click="cancelChoice = false" :disabled="modalBusy">KEEP</button>
+                </template>
+                <button v-else type="button" class="btn btn-sm btn-danger"
+                  @click="isSeriesScheduled(selected.program) ? (cancelChoice = true) : cancelSelected()" :disabled="modalBusy">
+                  {{ modalBusy ? '…' : '⨯ CANCEL RECORDING' }}
+                </button>
+              </template>
+              <template v-else-if="canRecord">
+                <button v-if="selected.program.series_link" type="button" class="btn btn-sm" @click="recordSelectedSeries" :disabled="modalBusy">
+                  {{ modalBusy ? '…' : '⦿ RECORD SERIES' }}
+                </button>
+                <button type="button" class="btn btn-sm btn-primary" @click="recordSelected" :disabled="modalBusy">
+                  {{ modalBusy ? '…' : '⦿ RECORD' }}
+                </button>
+              </template>
+              <p v-else class="text-xs font-mono text-ink-mute">This programme has already aired.</p>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      </teleport>
+
+      <teleport to="body">
+      <div v-if="channelsModal" class="epg-modal-backdrop" @click.self="channelsModal = false">
+        <section class="panel epg-modal">
+          <header class="panel-header">
+            <span class="panel-title">CHANNELS</span>
+            <button type="button" class="btn btn-sm btn-icon" @click="channelsModal = false" aria-label="Close">✕</button>
+          </header>
+          <div class="panel-body space-y-5">
+            <div>
+              <label class="field-label">PINNED · SHOWN FIRST, IN THIS ORDER</label>
+              <p v-if="pinnedDraft.length === 0" class="text-xs text-ink-dim">
+                Nothing pinned yet — hit the ★ next to a channel below (or in the guide rail).
+              </p>
+              <ul v-else class="space-y-1.5">
+                <li v-for="(id, i) in pinnedDraft" :key="id" class="flex items-center gap-2">
+                  <button type="button" class="btn btn-sm btn-icon" :disabled="i === 0"
+                    @click="movePin(i, -1)" :aria-label="'Move ' + draftName(id) + ' up'">↑</button>
+                  <button type="button" class="btn btn-sm btn-icon" :disabled="i === pinnedDraft.length - 1"
+                    @click="movePin(i, 1)" :aria-label="'Move ' + draftName(id) + ' down'">↓</button>
+                  <span class="font-mono text-[0.8rem] flex-1 min-w-0 truncate">
+                    <span class="text-signal-yellow">★</span> {{ draftName(id) }}
+                  </span>
+                  <button type="button" class="btn btn-sm btn-icon" @click="toggleDraftPin(id)"
+                    :aria-label="'Unpin ' + draftName(id)">✕</button>
+                </li>
+              </ul>
+            </div>
+            <div>
+              <label class="field-label">SORT UNPINNED CHANNELS BY</label>
+              <div class="chip-row">
+                <button v-for="s in sortOptions" :key="s.key" type="button"
+                  :class="['btn', 'btn-sm', sortDraft === s.key ? 'btn-primary' : '']"
+                  @click="sortDraft = s.key">{{ s.label }}</button>
+              </div>
+            </div>
+            <div>
+              <label class="field-label">ALL CHANNELS · ★ PINS, TICK SHOWS</label>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
+                <div v-for="ch in guide?.channels || []" :key="ch.id" class="flex items-center gap-2">
+                  <button type="button" :class="['epg-pin', { pinned: pinnedDraft.includes(String(ch.id)) }]"
+                    @click="toggleDraftPin(String(ch.id))"
+                    :aria-label="(pinnedDraft.includes(String(ch.id)) ? 'Unpin ' : 'Pin ') + ch.name">★</button>
+                  <label class="flex items-center gap-2.5 text-sm cursor-pointer min-w-0">
+                    <input type="checkbox" class="chk"
+                      :checked="!hiddenDraft.has(String(ch.id))"
+                      :disabled="pinnedDraft.includes(String(ch.id))"
+                      @change="toggleHidden(ch)" />
+                    <span class="font-mono text-[0.8rem] truncate">
+                      <span class="text-ink-mute">{{ ch.number ?? '' }}</span>
+                      {{ ch.name }}<span v-if="ch.hd" class="text-ink-mute"> · HD</span>
+                    </span>
+                  </label>
+                </div>
+              </div>
+            </div>
+            <div class="flex items-center justify-end gap-2 pt-1">
+              <button type="button" class="btn btn-sm" @click="channelsModal = false">CANCEL</button>
+              <button type="button" class="btn btn-sm btn-primary" @click="saveChannelPrefs" :disabled="savingPrefs">
+                {{ savingPrefs ? 'SAVING…' : 'SAVE' }}
+              </button>
+            </div>
+          </div>
+        </section>
+      </div>
+      </teleport>
+    </div>
+  `,
+  setup() {
+    const { flashText, flashKind, flash } = useFlash()
+    const mode = ref('guide')
+    const modes = [
+      { key: 'guide', label: 'GUIDE' },
+      { key: 'upcoming', label: 'UPCOMING' },
+      { key: 'series', label: 'SERIES' },
+    ]
+    const day = ref(0)
+    const guide = ref(null)
+    const guideByDay = new Map()
+    const loading = ref(false)
+    const error = ref('')
+    const needsSetup = ref(false)
+    const state = ref(null)
+    const stateError = ref('')
+    const scrollEl = ref(null)
+    const searchQ = ref('')
+    const searchResults = ref([])
+    const searching = ref(false)
+    const selected = ref(null)
+    const modalBusy = ref(false)
+    const busyId = ref(null)
+    const channelsModal = ref(false)
+    const hiddenDraft = ref(new Set())
+    const pinnedDraft = ref([])
+    const sortDraft = ref('default')
+    const savingPrefs = ref(false)
+    const sortOptions = [
+      { key: 'default', label: 'BOX ORDER' },
+      { key: 'number', label: 'NUMBER' },
+      { key: 'name', label: 'NAME' },
+    ]
+    const leadTime = ref(3)
+    const lagTime = ref(5)
+    const episodesToKeep = ref(0)
+
+    const clampRailPx = (px) => Math.min(EPG_RAIL_MAX_PX, Math.max(EPG_RAIL_MIN_PX, px))
+    const storedRailPx = () => {
+      try {
+        const px = Number(localStorage.getItem(EPG_RAIL_KEY))
+        return Number.isFinite(px) && px > 0 ? clampRailPx(px) : EPG_RAIL_DEFAULT_PX
+      } catch { return EPG_RAIL_DEFAULT_PX }
+    }
+    const railPx = ref(storedRailPx())
+    const trackWidth = EPG_DAY_MIN * EPG_PX_PER_MIN
+
+    // Minute resolution on purpose: the seconds clock ref would otherwise
+    // re-render every grid cell once a second (past/on-now classes read this).
+    const nowMs = computed(() => Math.floor(now.value.getTime() / 60_000) * 60_000)
+
+    const railFilter = ref('')
+
+    const visibleChannels = computed(() =>
+      (guide.value?.channels || []).filter((c) => !c.hidden))
+
+    // The filter hides rows with v-show instead of removing them from the
+    // v-for: toggling display is a style flip, while remove-and-remount pays
+    // for every programme cell again.
+    const railMatchIds = computed(() => {
+      const q = railFilter.value.trim().toLowerCase()
+      if (!q) return null
+      const set = new Set()
+      for (const c of visibleChannels.value) {
+        if ((c.name || '').toLowerCase().includes(q) || String(c.number ?? '').startsWith(q)) {
+          set.add(String(c.id))
+        }
+      }
+      return set
+    })
+
+    const rowShown = (ch) => !railMatchIds.value || railMatchIds.value.has(String(ch.id))
+
+    const firstUnpinnedId = computed(() => {
+      const shown = visibleChannels.value.filter(rowShown)
+      for (let i = 1; i < shown.length; i++) {
+        if (!shown[i].pinned && shown[i - 1].pinned) return String(shown[i].id)
+      }
+      return null
+    })
+
+    const pinnedCount = computed(() => visibleChannels.value.filter((c) => c.pinned).length)
+
+    const railNumWidth = computed(() =>
+      Math.max(2, ...visibleChannels.value.map((c) => String(c.number ?? '').length)))
+    const railNum = (ch) =>
+      ch.number == null ? '' : String(ch.number).padStart(railNumWidth.value, '0')
+
+    const ticks = computed(() => {
+      if (!guide.value) return []
+      return Array.from({ length: 24 }, (_, h) => ({
+        x: h * 60 * EPG_PX_PER_MIN,
+        label: fmtClock(guide.value.dayStart + h * 3_600_000),
+      }))
+    })
+
+    const nowX = computed(() => {
+      if (!guide.value) return null
+      const x = ((nowMs.value - guide.value.dayStart) / 60_000) * EPG_PX_PER_MIN
+      return x >= 0 && x <= trackWidth ? x : null
+    })
+
+    const dayChips = computed(() => Array.from({ length: 7 }, (_, d) => {
+      if (d === 0) return { day: 0, label: 'TODAY' }
+      const date = new Date(Date.now() + d * 86_400_000)
+      return {
+        day: d,
+        label: new Intl.DateTimeFormat('en-AU', { timeZone: tz.value, weekday: 'short' })
+          .format(date).toUpperCase(),
+      }
+    }))
+
+    const dayTitle = computed(() => {
+      if (!guide.value) return dayChips.value[day.value]?.label || ''
+      return new Intl.DateTimeFormat('en-AU', {
+        timeZone: tz.value, weekday: 'long', day: 'numeric', month: 'short',
+      }).format(new Date(guide.value.dayStart + 12 * 3_600_000))
+    })
+
+    const scheduledByProgramId = computed(() => {
+      const map = new Map()
+      for (const r of state.value?.futureRecordings || []) {
+        if (r?.programId != null) map.set(String(r.programId), r)
+      }
+      return map
+    })
+
+    const activeRecordingSet = computed(() =>
+      new Set((state.value?.activeRecordingIds || []).map(String)))
+
+    const seriesLinkSet = computed(() => {
+      const set = new Set()
+      for (const t of state.value?.seriesTags || []) {
+        const link = t?.seriesLinkId ?? t?.id
+        if (link != null) set.add(String(link))
+      }
+      return set
+    })
+
+    const upcoming = computed(() =>
+      [...(state.value?.futureRecordings || [])]
+        .filter((r) => !r.pendingDelete)
+        .sort((a, b) => tsOf(a.startDate) - tsOf(b.startDate)))
+
+    const seriesTags = computed(() => state.value?.seriesTags || [])
+
+    const stateLine = computed(() => {
+      if (!state.value) return ''
+      const bits = [
+        state.value.standby ? 'box in standby' : 'box online',
+        `${upcoming.value.length} scheduled`,
+        `${seriesTags.value.length} series`,
+      ]
+      if (state.value.maxConcurrentRecordings) {
+        bits.push(`${state.value.maxConcurrentRecordings} tuner limit`)
+      }
+      return bits.join(' · ')
+    })
+
+    const searchActive = computed(() => searchQ.value.trim().length >= 2)
+
+    const canRecord = computed(() =>
+      selected.value && selected.value.program.end > nowMs.value
+      && (selected.value.channel?.recordable !== false))
+
+    const modalChannel = computed(() =>
+      selected.value
+        ? (selected.value.channel || channelById(selected.value.program.channelId))
+        : null)
+
+    const tsOf = tsOfMs
+    const fmtClock = fmtClockTz
+
+    const fmtDayTime = (ms) => new Intl.DateTimeFormat('en-AU', {
+      timeZone: tz.value, weekday: 'short', day: 'numeric', month: 'short',
+      hour: 'numeric', minute: '2-digit',
+    }).format(new Date(ms)).toLowerCase()
+
+    const ratingLabel = (p) => {
+      const r = p?.rating
+      return typeof r === 'string' && r && Number.isNaN(Number(r)) ? r : ''
+    }
+
+    const seLabel = (p) => {
+      if (p.series_no == null && p.episode_no == null) return ''
+      const s = p.series_no != null ? `S${String(p.series_no).padStart(2, '0')}` : ''
+      const e = p.episode_no != null ? `E${String(p.episode_no).padStart(2, '0')}` : ''
+      return `${s}${e}`
+    }
+
+    const channelById = (id) =>
+      (guide.value?.channels || []).find((c) => String(c.id) === String(id)) || null
+
+    const channelName = (id) => channelById(id)?.name || `channel ${id}`
+
+    const seriesKey = (t) => String(t?.seriesLinkId ?? t?.id ?? t?.name ?? '')
+
+    const cellState = (p) => {
+      const scheduled = scheduledByProgramId.value.get(String(p.program_id ?? p.programId))
+      if (scheduled && activeRecordingSet.value.has(String(scheduled.id))) return 'recording'
+      if (scheduled) return 'scheduled'
+      if (p.series_link != null && seriesLinkSet.value.has(String(p.series_link))) return 'series'
+      return ''
+    }
+
+    const isSeriesScheduled = (p) => {
+      const scheduled = scheduledByProgramId.value.get(String(p.program_id ?? p.programId))
+      return Boolean(scheduled?.seriesLinkId != null
+        && seriesLinkSet.value.has(String(scheduled.seriesLinkId)))
+    }
+
+    const cellTitle = (p) => {
+      const state = cellState(p)
+      if (state === 'recording') return `${p.title} · recording now`
+      if (state === 'scheduled') {
+        return `${p.title} · ${isSeriesScheduled(p) ? 'series recording scheduled' : 'one-off recording scheduled'}`
+      }
+      if (state === 'series') return `${p.title} · series tag on this show`
+      return p.title
+    }
+
+    const cellX = (t) => {
+      const clamped = Math.max(t, guide.value.dayStart)
+      return ((clamped - guide.value.dayStart) / 60_000) * EPG_PX_PER_MIN
+    }
+
+    const cellWidth = (p) => {
+      const start = Math.max(p.start, guide.value.dayStart)
+      const end = Math.min(p.end, guide.value.dayEnd)
+      return Math.max(((end - start) / 60_000) * EPG_PX_PER_MIN - 2, 6)
+    }
+
+    const cellStyle = (p) => ({
+      left: `${cellX(p.start)}px`,
+      width: `${cellWidth(p)}px`,
+    })
+
+    const loadDay = async (d, { force = false } = {}) => {
+      error.value = ''
+      needsSetup.value = false
+      if (!force && guideByDay.has(d)) {
+        guide.value = guideByDay.get(d)
+        return
+      }
+      loading.value = true
+      try {
+        const g = await api('GET', `/api/epg/guide?day=${d}`)
+        guideByDay.set(d, g)
+        if (day.value === d) guide.value = g
+      } catch (err) {
+        error.value = `Guide load failed: ${err.message}`
+        const s = await api('GET', '/api/settings').catch(() => ({}))
+        needsSetup.value = !s.fetch_cloud_activation_code || !s.fetch_cloud_pin_set
+      } finally {
+        loading.value = false
+      }
+    }
+
+    const loadState = async ({ fresh = false } = {}) => {
+      stateError.value = ''
+      try {
+        state.value = await api('GET', `/api/epg/state${fresh ? '?fresh=1' : ''}`)
+      } catch (err) {
+        stateError.value = `Box state failed: ${err.message}`
+      }
+    }
+
+    const scrollToMs = async (ms) => {
+      await nextTick()
+      if (!scrollEl.value || !guide.value) return
+      const x = ((ms - guide.value.dayStart) / 60_000) * EPG_PX_PER_MIN
+      scrollEl.value.scrollLeft = Math.max(0, x - 60)
+    }
+
+    const setDay = async (d) => {
+      day.value = d
+      await loadDay(d)
+      await scrollToMs(d === 0 ? nowMs.value - 30 * 60_000 : guide.value.dayStart + 18 * 3_600_000)
+    }
+
+    const setMode = async (m) => {
+      mode.value = m
+      if (m !== 'guide') {
+        loadState()
+        return
+      }
+      await scrollToMs(day.value === 0
+        ? nowMs.value - 30 * 60_000
+        : (guide.value?.dayStart ?? 0) + 18 * 3_600_000)
+    }
+
+    const jumpNow = async () => {
+      if (day.value !== 0) await setDay(0)
+      else await scrollToMs(nowMs.value - 30 * 60_000)
+    }
+
+    const jumpTonight = async () => {
+      if (day.value !== 0) { day.value = 0; await loadDay(0) }
+      await scrollToMs(guide.value.dayStart + 19 * 3_600_000)
+    }
+
+    const manualRefresh = async () => {
+      guideByDay.clear()
+      await Promise.all([loadDay(day.value, { force: true }), loadState({ fresh: true })])
+      if (!error.value) flash({ msg: 'Guide refreshed.' })
+    }
+
+    const openProgram = (p, channel) => {
+      leadTime.value = 3
+      lagTime.value = 5
+      episodesToKeep.value = 0
+      cancelChoice.value = false
+      selected.value = { program: p, channel }
+    }
+
+    const closeModal = () => {
+      cancelChoice.value = false
+      selected.value = null
+    }
+
+    const recordSelected = async () => {
+      const { program, channel } = selected.value
+      modalBusy.value = true
+      try {
+        await api('POST', '/api/epg/record', {
+          channel_id: channel?.id ?? program.channelId,
+          program_id: program.program_id,
+          epg_program_id: program.epg_program_id,
+          lead_time: leadTime.value,
+          lag_time: lagTime.value,
+        })
+        flash({ msg: `Scheduled "${program.title}".` })
+        closeModal()
+        await loadState({ fresh: true })
+      } catch (err) {
+        flash({ msg: `Record failed: ${err.message}`, kind: 'err', ms: 8000 })
+      } finally {
+        modalBusy.value = false
+      }
+    }
+
+    const recordSelectedSeries = async () => {
+      const { program, channel } = selected.value
+      modalBusy.value = true
+      try {
+        await api('POST', '/api/epg/record-series', {
+          series_link: program.series_link,
+          channel_id: channel?.id ?? program.channelId,
+          program_id: program.program_id,
+          epg_program_id: program.epg_program_id,
+          lead_time: leadTime.value,
+          lag_time: lagTime.value,
+          episodes_to_keep: episodesToKeep.value,
+        })
+        flash({ msg: `Series recording set for "${program.title}".` })
+        closeModal()
+        await loadState({ fresh: true })
+      } catch (err) {
+        flash({ msg: `Series record failed: ${err.message}`, kind: 'err', ms: 8000 })
+      } finally {
+        modalBusy.value = false
+      }
+    }
+
+    const cancelChoice = ref(false)
+
+    const cancelSelected = async () => {
+      const { program } = selected.value
+      modalBusy.value = true
+      try {
+        await api('POST', '/api/epg/cancel', { program_id: program.program_id })
+        flash({ msg: `Cancelled "${program.title}".` })
+        closeModal()
+        await loadState({ fresh: true })
+      } catch (err) {
+        flash({ msg: `Cancel failed: ${err.message}`, kind: 'err', ms: 8000 })
+      } finally {
+        modalBusy.value = false
+      }
+    }
+
+    const cancelSelectedSeries = async () => {
+      const { program } = selected.value
+      const rec = scheduledByProgramId.value.get(String(program.program_id ?? program.programId))
+      modalBusy.value = true
+      try {
+        await api('POST', '/api/epg/cancel-series', {
+          program_id: rec?.programId ?? null,
+          series_link_id: rec?.seriesLinkId,
+        })
+        flash({ msg: `Series recording cancelled.` })
+        closeModal()
+        await loadState({ fresh: true })
+      } catch (err) {
+        flash({ msg: `Cancel failed: ${err.message}`, kind: 'err', ms: 8000 })
+      } finally {
+        modalBusy.value = false
+      }
+    }
+
+    const cancelUpcoming = async (r) => {
+      if (!confirm(`Cancel the scheduled recording of "${r.name}"?`)) return
+      busyId.value = r.programId
+      try {
+        await api('POST', '/api/epg/cancel', { program_id: r.programId })
+        flash({ msg: `Cancelled "${r.name}".` })
+        await loadState({ fresh: true })
+      } catch (err) {
+        flash({ msg: `Cancel failed: ${err.message}`, kind: 'err', ms: 8000 })
+      } finally {
+        busyId.value = null
+      }
+    }
+
+    const cancelSeriesTag = async (t) => {
+      if (!confirm(`Cancel the series recording "${t.name || seriesKey(t)}"? Existing recordings stay on the box.`)) return
+      busyId.value = seriesKey(t)
+      try {
+        await api('POST', '/api/epg/cancel-series', {
+          program_id: t.programId ?? null,
+          series_link_id: t.seriesLinkId ?? t.id,
+        })
+        flash({ msg: `Series recording cancelled.` })
+        await loadState({ fresh: true })
+      } catch (err) {
+        flash({ msg: `Cancel failed: ${err.message}`, kind: 'err', ms: 8000 })
+      } finally {
+        busyId.value = null
+      }
+    }
+
+    const reloadGuide = async () => {
+      guideByDay.clear()
+      await loadDay(day.value, { force: true })
+    }
+
+    const dragPinId = ref(null)
+    const dropTargetId = ref(null)
+
+    const currentPins = () => (guide.value?.channels || [])
+      .filter((c) => c.pinned)
+      .map((c) => String(c.id))
+
+    // Pointer-based drag (not HTML5 drag-and-drop) so reordering works with a
+    // finger on iOS as well as a mouse. The whole rail cell of a pinned row is
+    // the drag surface; the drag only starts after a small movement threshold
+    // so plain clicks and taps (the ★ button) still register. Rows are
+    // hit-tested by their live bounding boxes on every move, and a cloned
+    // ghost of the cell follows the pointer.
+    const pinRowUnderPointer = (clientY) => {
+      for (const el of document.querySelectorAll('.epg-row.pinned')) {
+        const box = el.getBoundingClientRect()
+        if (clientY >= box.top && clientY <= box.bottom) return el.dataset.channelId || null
+      }
+      return null
+    }
+
+    let pendingDrag = null
+    let dragDidMove = false
+    let ghostEl = null
+    let ghostDX = 0
+    let ghostDY = 0
+
+    const moveGhost = (e) => {
+      if (!ghostEl) return
+      ghostEl.style.left = `${e.clientX - ghostDX}px`
+      ghostEl.style.top = `${e.clientY - ghostDY}px`
+    }
+
+    const removeGhost = () => {
+      if (!ghostEl) return
+      ghostEl.remove()
+      ghostEl = null
+    }
+
+    const startPinDrag = (e) => {
+      const { ch, cell, pointerId, x, y } = pendingDrag
+      pendingDrag = null
+      dragDidMove = true
+      try { cell.setPointerCapture(pointerId) } catch { /* ignore */ }
+      dragPinId.value = String(ch.id)
+      dropTargetId.value = null
+      const box = cell.getBoundingClientRect()
+      ghostDX = x - box.left
+      ghostDY = y - box.top
+      ghostEl = cell.cloneNode(true)
+      ghostEl.classList.add('epg-ghost')
+      ghostEl.style.width = `${box.width}px`
+      ghostEl.style.height = `${box.height}px`
+      document.body.appendChild(ghostEl)
+      moveGhost(e)
+    }
+
+    const onPinPointerDown = (ch, e) => {
+      if (!ch.pinned) return
+      if (e.button !== 0 && e.pointerType === 'mouse') return
+      pendingDrag = { ch, cell: e.currentTarget, pointerId: e.pointerId, x: e.clientX, y: e.clientY }
+    }
+
+    const onPinPointerMove = (e) => {
+      if (pendingDrag) {
+        if (Math.hypot(e.clientX - pendingDrag.x, e.clientY - pendingDrag.y) < EPG_DRAG_THRESHOLD_PX) return
+        startPinDrag(e)
+      }
+      if (!dragPinId.value) return
+      e.preventDefault()
+      moveGhost(e)
+      const over = pinRowUnderPointer(e.clientY)
+      dropTargetId.value = over && over !== dragPinId.value ? over : null
+    }
+
+    const onPinPointerUp = async () => {
+      pendingDrag = null
+      removeGhost()
+      if (dragDidMove) setTimeout(() => { dragDidMove = false }, 0)
+      const from = dragPinId.value
+      const to = dropTargetId.value
+      dragPinId.value = null
+      dropTargetId.value = null
+      if (!from || !to || from === to) return
+      const orig = currentPins()
+      const movingDown = orig.indexOf(from) < orig.indexOf(to)
+      const pins = orig.filter((id) => id !== from)
+      pins.splice(pins.indexOf(to) + (movingDown ? 1 : 0), 0, from)
+      try {
+        await api('PUT', '/api/epg/channel-prefs', { pinned_ids: pins })
+        await reloadGuide()
+      } catch (err) {
+        flash({ msg: `Reorder failed: ${err.message}`, kind: 'err', ms: 6000 })
+      }
+    }
+
+    const onPinPointerCancel = () => {
+      pendingDrag = null
+      removeGhost()
+      dragDidMove = false
+      dragPinId.value = null
+      dropTargetId.value = null
+    }
+
+    const isSeriesRec = (r) =>
+      r?.seriesLinkId != null && seriesLinkSet.value.has(String(r.seriesLinkId))
+
+    const pinsOffscreen = ref(false)
+
+    const updatePinsOffscreen = () => {
+      const el = scrollEl.value
+      if (!el) { pinsOffscreen.value = false; return }
+      const rects = [...el.querySelectorAll('.epg-row.pinned')]
+        .map((row) => row.getBoundingClientRect())
+        .filter((r) => r.height > 0)
+      if (!rects.length) { pinsOffscreen.value = false; return }
+      const rulerBottom = el.getBoundingClientRect().top + el.querySelector('.epg-ruler').offsetHeight
+      pinsOffscreen.value = rects[rects.length - 1].bottom < rulerBottom
+    }
+
+    const scrollRailTop = () => scrollEl.value?.scrollTo({ top: 0, behavior: 'smooth' })
+
+    const railStripH = ref(0)
+    const syncRailStrip = () => { railStripH.value = scrollEl.value?.clientHeight || 0 }
+
+    let scrollRo = null
+    watch(scrollEl, (el, prev) => {
+      if (prev) prev.removeEventListener('scroll', updatePinsOffscreen)
+      if (scrollRo) { scrollRo.disconnect(); scrollRo = null }
+      if (el) {
+        el.addEventListener('scroll', updatePinsOffscreen, { passive: true })
+        scrollRo = new ResizeObserver(() => { syncRailStrip(); updatePinsOffscreen() })
+        scrollRo.observe(el)
+      }
+      syncRailStrip()
+      updatePinsOffscreen()
+    })
+    onUnmounted(() => { if (scrollRo) scrollRo.disconnect() })
+
+    const railResize = { active: false, startX: 0, startW: 0 }
+
+    const onRailResizeDown = (e) => {
+      e.preventDefault()
+      try { e.currentTarget.setPointerCapture(e.pointerId) } catch { /* ignore */ }
+      railResize.active = true
+      railResize.startX = e.clientX
+      railResize.startW = railPx.value
+    }
+
+    const onRailResizeMove = (e) => {
+      if (!railResize.active) return
+      railPx.value = clampRailPx(railResize.startW + e.clientX - railResize.startX)
+    }
+
+    const onRailResizeUp = () => {
+      if (!railResize.active) return
+      railResize.active = false
+      try { localStorage.setItem(EPG_RAIL_KEY, String(railPx.value)) } catch { /* private mode */ }
+    }
+
+    const togglePin = async (ch) => {
+      if (dragDidMove) return
+      const pinned = (guide.value?.channels || [])
+        .filter((c) => c.pinned)
+        .map((c) => String(c.id))
+      const key = String(ch.id)
+      const next = pinned.includes(key) ? pinned.filter((id) => id !== key) : [...pinned, key]
+      try {
+        await api('PUT', '/api/epg/channel-prefs', { pinned_ids: next })
+        await reloadGuide()
+      } catch (err) {
+        flash({ msg: `Pin failed: ${err.message}`, kind: 'err', ms: 6000 })
+      }
+    }
+
+    const openChannelsModal = () => {
+      const channels = guide.value?.channels || []
+      pinnedDraft.value = channels.filter((c) => c.pinned).map((c) => String(c.id))
+      hiddenDraft.value = new Set(channels.filter((c) => c.hidden).map((c) => String(c.id)))
+      sortDraft.value = guide.value?.sort || 'default'
+      channelsModal.value = true
+    }
+
+    const draftName = (id) => channelById(id)?.name || `channel ${id}`
+
+    const toggleDraftPin = (id) => {
+      if (pinnedDraft.value.includes(id)) {
+        pinnedDraft.value = pinnedDraft.value.filter((p) => p !== id)
+      } else {
+        pinnedDraft.value = [...pinnedDraft.value, id]
+        const next = new Set(hiddenDraft.value)
+        next.delete(id)
+        hiddenDraft.value = next
+      }
+    }
+
+    const movePin = (i, delta) => {
+      const next = [...pinnedDraft.value]
+      const [moved] = next.splice(i, 1)
+      next.splice(i + delta, 0, moved)
+      pinnedDraft.value = next
+    }
+
+    const toggleHidden = (ch) => {
+      const next = new Set(hiddenDraft.value)
+      const key = String(ch.id)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      hiddenDraft.value = next
+    }
+
+    const saveChannelPrefs = async () => {
+      savingPrefs.value = true
+      try {
+        await api('PUT', '/api/epg/channel-prefs', {
+          pinned_ids: pinnedDraft.value,
+          hidden_ids: [...hiddenDraft.value],
+          sort: sortDraft.value,
+        })
+        channelsModal.value = false
+        await reloadGuide()
+        flash({ msg: 'Channel preferences saved.' })
+      } catch (err) {
+        flash({ msg: `Save failed: ${err.message}`, kind: 'err', ms: 6000 })
+      } finally {
+        savingPrefs.value = false
+      }
+    }
+
+    let searchTimer = null
+    watch(searchQ, () => {
+      if (searchTimer) clearTimeout(searchTimer)
+      if (!searchActive.value) { searchResults.value = []; return }
+      searching.value = true
+      searchTimer = setTimeout(async () => {
+        try {
+          const r = await api('GET', `/api/epg/search?q=${encodeURIComponent(searchQ.value.trim())}`)
+          searchResults.value = r.results || []
+        } catch {
+          searchResults.value = []
+        } finally {
+          searching.value = false
+        }
+      }, EPG_SEARCH_DEBOUNCE_MS)
+    })
+
+    const onKeydown = (e) => {
+      if (e.key !== 'Escape') return
+      if (selected.value) selected.value = null
+      else if (channelsModal.value) channelsModal.value = false
+    }
+
+    let statePollTimer = null
+    onMounted(async () => {
+      window.addEventListener('keydown', onKeydown)
+      await loadDay(0)
+      await scrollToMs(Date.now() - 30 * 60_000)
+      loadState()
+      statePollTimer = setInterval(loadState, EPG_STATE_POLL_MS)
+    })
+    onUnmounted(() => {
+      window.removeEventListener('keydown', onKeydown)
+      if (statePollTimer) clearInterval(statePollTimer)
+      if (searchTimer) clearTimeout(searchTimer)
+    })
+
+    return {
+      mode, modes, setMode, day, dayChips, dayTitle, setDay,
+      guide, loading, error, needsSetup, loadDay, state, stateError, stateLine,
+      scrollEl, railPx, trackWidth, railStripH, railNumWidth, ticks, nowX, nowMs,
+      visibleChannels, railNum, railFilter, pinnedCount, pinsOffscreen, scrollRailTop,
+      cellState, cellStyle, cellWidth, cellTitle, isSeriesScheduled, isSeriesRec,
+      jumpNow, jumpTonight, manualRefresh,
+      searchQ, searchActive, searchResults, searching,
+      selected, openProgram, closeModal, modalBusy, canRecord, modalChannel,
+      leadTime, lagTime, episodesToKeep,
+      leadOptions: EPG_LEAD_OPTIONS, lagOptions: EPG_LAG_OPTIONS, keepOptions: EPG_KEEP_OPTIONS,
+      recordSelected, recordSelectedSeries, cancelSelected, cancelSelectedSeries, cancelChoice,
+      upcoming, seriesTags, seriesKey, cancelUpcoming, cancelSeriesTag,
+      isActiveRecording: (r) => activeRecordingSet.value.has(String(r.id)),
+      busyId, channelsModal, openChannelsModal, hiddenDraft, toggleHidden,
+      pinnedDraft, sortDraft, sortOptions, savingPrefs, saveChannelPrefs,
+      togglePin, toggleDraftPin, movePin, draftName, rowShown, firstUnpinnedId,
+      dropTargetId, dragPinId,
+      onPinPointerDown, onPinPointerMove, onPinPointerUp, onPinPointerCancel,
+      onRailResizeDown, onRailResizeMove, onRailResizeUp,
+      channelById, channelName, fmtClock, fmtDayTime, seLabel, ratingLabel, tsOf,
+      flashText, flashKind,
+    }
+  },
+}
+
 const VIEW_MAP = {
   dashboard: DashboardView,
+  guide: EpgView,
   shows: ShowsView,
   syncs: SyncsView,
   recordings: RecordingsView,
@@ -2608,6 +3825,7 @@ const VIEW_MAP = {
 
 const TABS = [
   { key: 'dashboard',  label: 'DASHBOARD'  },
+  { key: 'guide',      label: 'TV GUIDE'   },
   { key: 'shows',      label: 'SHOWS'      },
   { key: 'syncs',      label: 'SYNCS'      },
   { key: 'recordings', label: 'RECORDINGS' },

@@ -45,11 +45,16 @@
 
 Your Fetch TV box records the shows you tell it to, then the recordings sit on the box, watchable only through Fetch's own interface. **Fetcharr** watches the box on your LAN, downloads new episodes of shows you mark to follow, drops the files into your Plex TV library, pokes Plex to scan, and optionally deletes the recording from the Fetch box once Plex confirms the file.
 
-If your media stack is Fetch TV → Plex, Fetcharr is the automation in between: schedule recordings on the box as usual, and they turn up in Plex named and foldered.
+If your media stack is Fetch TV → Plex, Fetcharr is the automation in between: schedule recordings from its built-in TV Guide (or on the box as usual), and they turn up in Plex named and foldered.
 
 <p align="center">
   <img src="docs/img/screenshot-dashboard.png" alt="Dashboard" width="100%"/>
   <br/><em>Dashboard</em>
+</p>
+
+<p align="center">
+  <img src="docs/img/screenshot-guide.png" alt="TV Guide" width="100%"/>
+  <br/><em>TV Guide</em>
 </p>
 
 <p align="center">
@@ -76,7 +81,7 @@ If your media stack is Fetch TV → Plex, Fetcharr is the automation in between:
 
 ## What Fetcharr isn't
 
-- ❌ **An indexer integration** (Sonarr / Radarr / Prowlarr): Fetcharr only works with what Fetch has already recorded; it doesn't tell Fetch *what* to record. Schedule recordings from the box's own on-screen TV guide (its EPG), as usual.
+- ❌ **An indexer integration** (Sonarr / Radarr / Prowlarr): Fetcharr works with the recordings on your Fetch box — it downloads what the box has recorded, and its TV Guide schedules what the box records next. It doesn't search the internet for content.
 - ❌ **Authenticated:** designed for a home network you trust. CSRF protection, rate limiting, and a strict content-security policy are in place, but there's no login, so anyone who can reach it can change its settings. Don't expose it to the internet (see [Security](#security)).
 - ❌ **A converter:** files arrive from the box as `.ts` (the raw broadcast format) and stay `.ts`; Fetcharr never re-encodes them. The optional ad-cutting copies the video across untouched, so there's no quality loss and no change of format. Add Tdarr or similar afterwards if you need `.mkv`.
 - ❌ **A notifier:** no Discord / ntfy / push integration.
@@ -86,6 +91,7 @@ If your media stack is Fetch TV → Plex, Fetcharr is the automation in between:
 
 ## Features
 
+- **TV Guide**: a 7-day programme guide in the browser — schedule, cancel, and series-record on the box (with padding and episodes-to-keep options), search the week, pin and reorder favourite channels, and see what's on now from the dashboard. Uses your Fetch cloud login; no Fetch mobile app needed.
 - **Zero-config discovery**: finds your Fetch TV box (SSDP) and Plex server (GDM) on the LAN, and auto-detects the Plex token from a bind-mounted `Preferences.xml`.
 - **First-run wizard**: walks Fetch box → storage → Plex → optional Fetch Cloud. Re-openable from Settings; previously-saved values prefill.
 - **Per-show follow**: pick a Fetch show, match it by name to an existing folder under your media root (even when the names aren't identical), and set a season template.
@@ -107,7 +113,7 @@ If your media stack is Fetch TV → Plex, Fetcharr is the automation in between:
 - A **Fetch TV Mighty** (the box that records your TV, a PVR) on the same LAN as the host running Fetcharr. Fetcharr finds the box by listening for the announcement it broadcasts (SSDP), and those broadcasts don't travel between separate parts of a network, so both have to sit on the same one.
 - **Docker + Docker Compose** on that host.
 - **Plex Media Server** is optional; Fetcharr runs fine without it, you just won't get the automatic Plex library refresh after a sync.
-- A **Fetch cloud account** (activation code + PIN) is optional; you only need it if you want Fetcharr to delete recordings from the box once they've synced.
+- A **Fetch cloud account** (activation code + PIN) is optional; it powers the TV Guide (browse and schedule recordings from the browser) and delete-from-Fetch after a sync.
 
 ## Quick start
 
@@ -217,7 +223,7 @@ Architecture diagrams, the sync state machine, the delete-from-Fetch cloud ratio
 
 **Delete-from-Fetch fails with "No I_AM_ALIVE reply" (or "Timed out waiting for I_AM_ALIVE handshake")**
 
-- The reply comes from your Fetch box via Fetch's cloud, and a box whose cloud session has dozed off misses the ping even though it works fine on the LAN. Fetcharr pings twice (20 s) before giving up, and the first attempt usually wakes the box's session, so just retry the delete after a moment.
+- The reply comes from your Fetch box via Fetch's cloud, and a box whose cloud session has dozed off misses the ping even though it works fine on the LAN. Fetcharr pings three times over 30 s and sends a wake command between attempts, which usually revives a dozing session, so just retry after a moment.
 - If it keeps failing, open the official Fetch mobile app: if the app can't see the box either, the box↔cloud link is down; restarting the box resets it. [`docs/DEEP_DIVE.md`](docs/DEEP_DIVE.md#why-delete-from-fetch-goes-through-the-cloud-not-lan) has the mechanics.
 
 **Other containers can't reach Fetcharr by name**
