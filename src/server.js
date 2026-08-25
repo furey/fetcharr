@@ -28,7 +28,7 @@ import {
   getGuideDay,
   searchGuide,
   getRecordingState,
-  getChannelLogo,
+  getChannelImage,
   recordProgram,
   cancelProgram,
   recordSeries,
@@ -403,17 +403,20 @@ app.get('/api/epg/state', async (req, res) => {
   }
 })
 
-app.get('/api/epg/logo/:channelId', async (req, res) => {
+const serveChannelImage = (kind) => async (req, res) => {
   try {
-    const logo = await getChannelLogo({ channelId: req.params.channelId })
-    if (!logo) return res.status(404).end()
-    res.setHeader('Content-Type', logo.contentType)
+    const image = await getChannelImage({ channelId: req.params.channelId, kind })
+    if (!image) return res.status(404).end()
+    res.setHeader('Content-Type', image.contentType)
     res.setHeader('Cache-Control', 'public, max-age=86400')
-    res.send(logo.body)
+    res.send(image.body)
   } catch {
     res.status(404).end()
   }
-})
+}
+
+app.get('/api/epg/logo/:channelId', serveChannelImage('logo'))
+app.get('/api/epg/artwork/:channelId', serveChannelImage('thumb'))
 
 app.post('/api/epg/record', epgLimiter, doubleCsrfProtection, async (req, res) => {
   const { channel_id, program_id, epg_program_id, lead_time, lag_time } = req.body || {}

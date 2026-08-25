@@ -42,6 +42,21 @@ test('parseEpgProgramsResponse: survives a reordered program_fields list', () =>
   assert.equal(programsByChannel['5'][0].title, 'Show')
 })
 
+test('parseEpgProgramsResponse: normalises the renamed schema (id/program_id) to canonical ids', () => {
+  const body = {
+    __meta__: {
+      program_fields: ['id', 'title', 'start', 'end', 'synopsis_id', 'program_id', 'hashed_program_id'],
+    },
+    channels: { 2: [[2513404631, 'Inside India', 1000, 2000, 's9', 435652, 'abc123']] },
+    synopses: { s9: 'Synopsis.' },
+  }
+  const { programsByChannel } = parseEpgProgramsResponse(body)
+  const p = programsByChannel['2'][0]
+  assert.equal(p.program_id, 2513404631)
+  assert.equal(p.epg_program_id, 435652)
+  assert.equal(p.synopsis, 'Synopsis.')
+})
+
 test('parseEpgProgramsResponse: tolerates missing pieces', () => {
   assert.deepEqual(parseEpgProgramsResponse({}), { programsByChannel: {} })
   assert.deepEqual(parseEpgProgramsResponse(null), { programsByChannel: {} })
@@ -130,15 +145,33 @@ test('mergeChannels: merges box lineup with cloud directory on epg_id, keeps box
       { id: 14, epg_id: 104, name: 'Radio', isAudio: true },
     ],
     cloudChannels: {
-      900: { epg_id: 102, name: 'ABC', image: '/logos/abc.png', high_definition: true },
+      900: {
+        epg_id: 102,
+        name: 'ABC',
+        number: 2,
+        high_definition: true,
+        images: {
+          channel_logo_offstate: {
+            original: 'http://static.lb.i.fetchtv.com.au/abc-off.png',
+            presets: {
+              channelimage_sui_64x36_offstate_channel: 'http://static/abc-64x36.webp',
+              channelimage_sui_110x62_offstate_channel: 'http://static/abc-110x62.webp',
+            },
+          },
+          landscape_thumbnail: { original: 'http://static.fetchtv.com.au/abc-wide.png', presets: {} },
+        },
+      },
     },
   })
   assert.equal(channels.length, 2)
   assert.deepEqual(channels.map((c) => c.id), [11, 12])
   assert.equal(channels[1].name, 'ABC')
+  assert.equal(channels[1].number, 2)
   assert.equal(channels[1].hd, true)
   assert.equal(channels[1].recordable, false)
-  assert.equal(channels[1].image, '/logos/abc.png')
+  assert.equal(channels[1].logo, 'http://static/abc-110x62.webp')
+  assert.equal(channels[1].thumb, 'http://static.fetchtv.com.au/abc-wide.png')
+  assert.equal(channels[0].logo, '')
 })
 
 test('localMidnightMs: floors to local midnight', () => {

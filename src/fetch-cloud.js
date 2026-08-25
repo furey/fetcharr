@@ -241,14 +241,26 @@ export const fetchEpgPrograms = async ({ channelIds, startMs, blockCount = 6 } =
 
 // The programslist response is column-oriented: per-channel arrays of positional
 // program tuples, named by __meta__.program_fields, with synopses in a side map.
+// Two field schemas exist on the wire: the pyfetchtv-era one
+// (program_id, …, epg_program_id) and the current one where the airing id is
+// named `id` and the programme id is named `program_id`. Both normalise to
+// program_id = airing id (RECORD_PROGRAM's programId) and epg_program_id =
+// programme id (RECORD_PROGRAM's epgProgramId).
 export const parseEpgProgramsResponse = (body) => {
   const fields = body?.__meta__?.program_fields || []
+  const fieldSet = new Set(fields)
+  const renamedSchema = !fieldSet.has('epg_program_id')
+    && fieldSet.has('id') && fieldSet.has('program_id')
   const synopses = body?.synopses || {}
   const programsByChannel = {}
   for (const [epgId, rows] of Object.entries(body?.channels || {})) {
     programsByChannel[epgId] = (rows || []).map((row) => {
       const program = {}
       fields.forEach((name, i) => { program[name] = row[i] })
+      if (renamedSchema) {
+        program.epg_program_id = program.program_id
+        program.program_id = program.id
+      }
       if (program.synopsis_id != null) {
         program.synopsis = synopses[program.synopsis_id] || ''
       }

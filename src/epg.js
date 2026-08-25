@@ -1,6 +1,6 @@
 import axios from 'axios'
 
-import { getSetting } from './db.js'
+import { getSetting, setSetting } from './db.js'
 import {
   fetchEpgChannels,
   fetchEpgPrograms,
@@ -97,28 +97,34 @@ export const cancelSeries = async (args) => {
   return result
 }
 
-// Channel logos live on static.fetchtv.com.au, which the browser CSP blocks —
-// proxied here with an in-memory cache instead of widening img-src.
-export const getChannelLogo = async ({ channelId } = {}) => {
-  const cached = logoCache.get(channelId)
+// Channel imagery lives on static(.lb.i).fetchtv.com.au, which the browser CSP
+// blocks — proxied here with an in-memory cache instead of widening img-src.
+// kind 'logo' is the EPG rail logo; 'thumb' is the landscape channel artwork
+// used in the programme detail modal (the EPG carries no per-programme images).
+export const getChannelImage = async ({ channelId, kind = 'logo' } = {}) => {
+  const cacheKey = `${kind}:${channelId}`
+  const cached = imageCache.get(cacheKey)
   if (cached && cached.expiresAt > Date.now()) return cached.value
   const guide = await getCachedGuide()
   const channel = guide.channels.find((c) => String(c.id) === String(channelId))
-  if (!channel?.image) return null
-  const url = channel.image.startsWith('http')
-    ? channel.image
-    : `${URL_STATIC_BASE}${channel.image.startsWith('/') ? '' : '/'}${channel.image}`
-  const res = await axios.get(url, { responseType: 'arraybuffer', timeout: LOGO_TIMEOUT_MS })
+  const url = kind === 'thumb' ? channel?.thumb : channel?.logo
+  if (!url) return null
+  const res = await axios.get(url, {
+    responseType: 'arraybuffer',
+    timeout: IMAGE_TIMEOUT_MS,
+    validateStatus: () => true,
+  })
+  if (res.status >= 400) return null
   const value = {
     body: Buffer.from(res.data),
     contentType: res.headers['content-type'] || 'image/png',
   }
-  logoCache.set(channelId, { value, expiresAt: Date.now() + LOGO_TTL_MS })
+  imageCache.set(cacheKey, { value, expiresAt: Date.now() + IMAGE_TTL_MS })
   return value
 }
 
 // Merges the box's channel lineup (authoritative ids + order) with the cloud
-// channel directory (names, HD flag, logo paths) on epg_id.
+// channel directory (names, LCN, HD flag, imagery) on epg_id.
 export const mergeChannels = ({ dvbChannels, cloudChannels }) => {
   const byEpgId = new Map()
   for (const [id, c] of Object.entries(cloudChannels || {})) {
@@ -131,14 +137,40 @@ export const mergeChannels = ({ dvbChannels, cloudChannels }) => {
       return {
         id: c.id,
         epgId: c.epg_id,
+        number: cloud.number ?? c.number ?? null,
         name: c.name || cloud.name || '',
         description: c.description || cloud.description || '',
         hd: Boolean(c.high_definition ?? cloud.high_definition),
         recordable: c.isRecordable !== false,
-        image: c.image || cloud.image || '',
+        logo: pickImage(cloud.images, LOGO_IMAGE_KEYS),
+        thumb: pickImage(cloud.images, THUMB_IMAGE_KEYS),
       }
     })
     .filter((c) => c.epgId != null)
+}
+
+// Image `original` URLs point at static.lb.i.fetchtv.com.au, which is internal
+// to Fetch and unreachable from the LAN — only the public CDN resizer preset
+// URLs (static.fetchtv.com.au/v4/images/…) actually resolve. Pick the largest
+// preset by the WxH encoded in its name; fall back to the original only when it
+// is already on the public host.
+const pickImage = (images, keys) => {
+  for (const key of keys) {
+    const entry = images?.[key]
+    if (!entry) continue
+    const presets = Object.entries(entry.presets || {})
+    if (presets.length > 0) {
+      presets.sort(([a], [b]) => presetArea(b) - presetArea(a))
+      return presets[0][1]
+    }
+    if (entry.original && !entry.original.includes('.lb.i.')) return entry.original
+  }
+  return ''
+}
+
+const presetArea = (name) => {
+  const m = name.match(/(\d+)x(\d+)/)
+  return m ? Number(m[1]) * Number(m[2]) : 0
 }
 
 export const localMidnightMs = (now = new Date()) => {
@@ -163,15 +195,27 @@ const getCachedGuide = async () => {
   return guideInflight
 }
 
+// The channel lineup (box DVB channel ids, region-correct) only comes from the
+// box's I_AM_ALIVE dump, but the box's cloud session sleeps. The last good
+// lineup is persisted so the guide keeps working while the box is unreachable —
+// only schedule/cancel commands truly need the box awake.
 const loadGuide = async (startMs) => {
   const [{ channels: cloudChannels }, boxState] = await Promise.all([
     fetchEpgChannels(),
-    getBoxState(),
+    getBoxState().catch(() => null),
   ])
-  const channels = mergeChannels({ dvbChannels: boxState.dvbChannels, cloudChannels })
+  let channels = boxState
+    ? mergeChannels({ dvbChannels: boxState.dvbChannels, cloudChannels })
+    : []
+  if (channels.length > 0) {
+    await setSetting('epg_channel_lineup', JSON.stringify(channels))
+  } else {
+    try { channels = JSON.parse(await getSetting('epg_channel_lineup') || '[]') } catch { channels = [] }
+  }
   if (channels.length === 0) {
     throw new FetchCloudError(
-      'Box returned no channel lineup — is the terminal a PVR and online?',
+      "Could not read the box's channel lineup (box unreachable and no lineup cached yet)."
+        + ' Wake the box, or open it in the Fetch mobile app, then retry.',
       { stage: 'epg', code: 'no-lineup' },
     )
   }
@@ -200,13 +244,14 @@ const withHiddenFlags = async (channels) => {
 let guideCache = null
 let guideInflight = null
 let stateCache = null
-const logoCache = new Map()
+const imageCache = new Map()
 
-const URL_STATIC_BASE = 'https://static.fetchtv.com.au'
+const LOGO_IMAGE_KEYS = ['channel_logo_offstate', 'channel_logo_focus', 'drawer_channel_logo']
+const THUMB_IMAGE_KEYS = ['landscape_thumbnail', 'phone_environment_image']
 const DAY_MS = 24 * 60 * 60 * 1000
 const GUIDE_BLOCKS = 42
 const GUIDE_TTL_MS = 60 * 60 * 1000
 const STATE_TTL_MS = 45 * 1000
-const LOGO_TTL_MS = 24 * 60 * 60 * 1000
-const LOGO_TIMEOUT_MS = 10000
+const IMAGE_TTL_MS = 24 * 60 * 60 * 1000
+const IMAGE_TIMEOUT_MS = 10000
 const SEARCH_RESULT_CAP = 100

@@ -653,6 +653,257 @@ a.icon-link {
   color: #544e47;
 }
 
+.epg-scroll {
+  overflow: auto;
+  max-height: 70vh;
+  border: 1px solid #3d3829;
+  border-radius: 0.4rem;
+  background: rgba(26, 22, 17, 0.45);
+  overscroll-behavior-x: contain;
+}
+
+.epg-canvas {
+  position: relative;
+}
+
+.epg-ruler {
+  position: sticky;
+  top: 0;
+  z-index: 7;
+  display: flex;
+  height: 2rem;
+  background: #28231b;
+  border-bottom: 1px dashed #3d3829;
+}
+
+.epg-ruler-corner {
+  position: sticky;
+  left: 0;
+  z-index: 8;
+  flex: none;
+  background: #28231b;
+  border-right: 1px solid #3d3829;
+}
+
+.epg-ruler-track {
+  position: relative;
+  flex: none;
+}
+
+.epg-tick {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  padding-left: 0.4rem;
+  border-left: 1px dashed rgba(61, 56, 41, 0.7);
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #8b837e;
+  white-space: nowrap;
+}
+
+.epg-row {
+  display: flex;
+  border-bottom: 1px solid rgba(61, 56, 41, 0.55);
+}
+
+.epg-row:last-child {
+  border-bottom: none;
+}
+
+.epg-rail-cell {
+  position: sticky;
+  left: 0;
+  z-index: 6;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0 0.6rem;
+  background: #28231b;
+  border-right: 1px solid #3d3829;
+  overflow: hidden;
+}
+
+.epg-rail-num {
+  flex: none;
+  min-width: 1.6rem;
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+  letter-spacing: 0.06em;
+  color: #544e47;
+  text-align: right;
+}
+
+.epg-modal-art {
+  width: 100%;
+  max-height: 9rem;
+  object-fit: cover;
+  border-radius: 0.3rem;
+  border: 1px solid rgba(61, 56, 41, 0.85);
+  background: rgba(26, 22, 17, 0.6);
+}
+
+.epg-rail-logo {
+  width: 1.6rem;
+  height: 1.6rem;
+  flex: none;
+  object-fit: contain;
+}
+
+.epg-rail-name {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  color: #b0a89e;
+  line-height: 1.15;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.epg-track {
+  position: relative;
+  flex: none;
+  height: 3.4rem;
+}
+
+.epg-cell {
+  position: absolute;
+  top: 0.25rem;
+  bottom: 0.25rem;
+  border: 1px solid rgba(61, 56, 41, 0.85);
+  border-radius: 0.25rem;
+  background: rgba(40, 35, 27, 0.85);
+  color: #fffcfb;
+  text-align: left;
+  padding: 0.3rem 0.45rem;
+  overflow: hidden;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+@media (hover: hover) {
+  .epg-cell:hover {
+    border-color: #009be4;
+    background: rgba(0, 155, 228, 0.08);
+    z-index: 2;
+  }
+}
+
+.epg-cell.past {
+  opacity: 0.45;
+}
+
+.epg-cell.on-now {
+  border-color: rgba(0, 155, 228, 0.55);
+}
+
+.epg-cell.scheduled {
+  border-color: #009be4;
+  background: rgba(0, 155, 228, 0.1);
+}
+
+.epg-cell.series {
+  border-color: #e2b03c;
+  background: rgba(226, 176, 60, 0.08);
+}
+
+.epg-cell.recording {
+  border-color: #f10c69;
+  background: rgba(241, 12, 105, 0.1);
+}
+
+.epg-cell-title {
+  display: block;
+  font-size: 0.74rem;
+  font-weight: 550;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.epg-cell-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.04em;
+  color: #8b837e;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.epg-nowline {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #f10c69;
+  box-shadow: 0 0 8px rgba(241, 12, 105, 0.6);
+  z-index: 5;
+  pointer-events: none;
+}
+
+.epg-nowline::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -3px;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 6px solid #f10c69;
+}
+
+.epg-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(26, 22, 17, 0.75);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.epg-modal {
+  width: 100%;
+  max-width: 34rem;
+  max-height: 85vh;
+  overflow-y: auto;
+}
+
+@media (max-width: 767px) {
+  .epg-scroll {
+    max-height: 65vh;
+  }
+
+  .epg-track {
+    height: 3rem;
+  }
+
+  .epg-modal-backdrop {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .epg-modal {
+    max-width: none;
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
 @media (max-width: 767px) {
   .field-input {
     font-size: 1rem;
