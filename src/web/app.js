@@ -732,7 +732,7 @@ const ShowsView = {
                 <input type="text" v-model="newPattern" list="fetch-shows" placeholder="e.g. Bluey" class="field-input flex-1 min-w-[12rem]" />
                 <button type="button" class="btn btn-sm" @click="loadFetchShows" :disabled="loadingShows"
                   title="Browse the Fetch TV box to populate this dropdown with current show titles.">
-                  {{ loadingShows ? 'BROWSING…' : '↻ REFRESH SHOWS' }}
+                  {{ loadingShows ? 'BROWSING…' : '⟳ REFRESH SHOWS' }}
                 </button>
               </div>
               <datalist id="fetch-shows">
@@ -974,7 +974,7 @@ const SyncsView = {
             <button type="button" class="btn btn-primary" @click="syncNow" :disabled="starting || !!syncStatus.activeSyncId">
               {{ syncStatus.activeSyncId ? '● SYNC RUNNING…' : (starting ? 'STARTING…' : '▶ SYNC NOW') }}
             </button>
-            <button type="button" class="btn" @click="manualRefresh">↻ REFRESH</button>
+            <button type="button" class="btn" @click="manualRefresh"><span class="btn-glyph">⟳</span> REFRESH</button>
             <button type="button" class="btn btn-danger" @click="clearAll" :disabled="!syncs.length">⨯ CLEAR HISTORY</button>
           </div>
 
@@ -1145,7 +1145,7 @@ const RecordingsView = {
               title="Remove all tombstoned rows from Fetcharr's history (recordings already deleted from the Fetch TV box).">
               {{ purging ? 'PURGING…' : '⨯ PURGE DELETED' }}
             </button>
-            <button type="button" class="btn btn-sm" @click="manualRefresh">↻ REFRESH</button>
+            <button type="button" class="btn btn-sm" @click="manualRefresh"><span class="btn-glyph">⟳</span> REFRESH</button>
           </div>
         </header>
         <div class="panel-body space-y-4">
@@ -1596,7 +1596,7 @@ const SettingsView = {
           <p class="text-sm text-ink-dim leading-relaxed max-w-2xl">
             Re-open the guided setup at any time. Already-saved values prefill — including a <code>••••• (stored)</code> hint for the Plex token and Fetch Cloud PIN — so you can tweak one step without retyping the rest. To wipe captured data first, use <strong class="text-ink">NUKE ALL STATE</strong> in the Danger Zone below.
           </p>
-          <button type="button" class="btn" @click="reopenWizard">↻ REOPEN WIZARD</button>
+          <button type="button" class="btn" @click="reopenWizard"><span class="btn-glyph">⟳</span> REOPEN WIZARD</button>
         </div>
       </section>
       <form @submit.prevent="save" class="space-y-6 pb-24">
@@ -1775,7 +1775,7 @@ const SettingsView = {
                 {{ plexProbing ? 'PROBING…' : '⇣ LOAD SECTIONS' }}
               </button>
               <button type="button" class="btn" @click="refreshPlexNow" :disabled="plexRefreshing">
-                {{ plexRefreshing ? 'REFRESHING…' : '↻ REFRESH PLEX NOW' }}
+                {{ plexRefreshing ? 'REFRESHING…' : '⟳ REFRESH PLEX NOW' }}
               </button>
               <span v-if="plexStatus" :class="['status-readout', plexStatusKind]">{{ plexStatus }}</span>
             </div>
@@ -2724,7 +2724,8 @@ const EpgView = {
           <span class="panel-title">GUIDE<template v-if="mode === 'guide'"> · {{ dayTitle }}</template><template v-else> · {{ mode.toUpperCase() }}</template></span>
           <div class="flex flex-wrap items-center gap-3">
             <span v-if="flashText" :class="['status-readout', flashKind]">{{ flashText }}</span>
-            <button type="button" class="btn btn-sm" @click="manualRefresh" :disabled="loading">↻ REFRESH</button>
+            <button type="button" class="btn btn-sm" @click="openChannelsModal" :disabled="!guide"><span class="btn-glyph">⚙︎</span> CHANNELS</button>
+            <button type="button" class="btn btn-sm" @click="manualRefresh" :disabled="loading"><span class="btn-glyph">⟳</span> REFRESH</button>
           </div>
         </header>
         <div class="panel-body space-y-4">
@@ -2785,7 +2786,6 @@ const EpgView = {
                   <button type="button" class="btn btn-sm" @click="jumpTonight">TONIGHT</button>
                 </div>
               </div>
-              <button type="button" class="btn btn-sm md:ml-auto" @click="openChannelsModal" :disabled="!guide">⚙︎ CHANNELS</button>
             </div>
             <p v-if="stateLine" class="text-xs font-mono text-ink-mute">{{ stateLine }}</p>
             <p v-if="guide?.stale" class="text-xs font-mono text-plex-yellow">
@@ -3084,6 +3084,15 @@ const EpgView = {
               </div>
             </div>
             <div>
+              <label class="flex items-center gap-2.5 text-sm cursor-pointer">
+                <input type="checkbox" class="chk" v-model="hideSdDraft" />
+                <span class="font-mono text-[0.8rem]">HIDE SD SIMULCASTS</span>
+              </label>
+              <p class="text-xs text-ink-dim mt-1.5">
+                Hides an SD channel only when its HD twin is in the lineup (10 next to 10 HD, Nine next to 9HD). SD-only channels stay. Applies to the grid and search; a pinned channel is never hidden.
+              </p>
+            </div>
+            <div>
               <label class="field-label">ALL CHANNELS · ★ PINS, TICK SHOWS</label>
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
                 <div v-for="ch in guide?.channels || []" :key="ch.id" class="flex items-center gap-2">
@@ -3144,6 +3153,7 @@ const EpgView = {
     const pinnedDraft = ref([])
     const sortDraft = ref('default')
     const savingPrefs = ref(false)
+    const hideSdDraft = ref(false)
     const sortOptions = [
       { key: 'default', label: 'BOX ORDER' },
       { key: 'number', label: 'NUMBER' },
@@ -3806,8 +3816,9 @@ const EpgView = {
     const openChannelsModal = () => {
       const channels = guide.value?.channels || []
       pinnedDraft.value = channels.filter((c) => c.pinned).map((c) => String(c.id))
-      hiddenDraft.value = new Set(channels.filter((c) => c.hidden).map((c) => String(c.id)))
+      hiddenDraft.value = new Set((guide.value?.hiddenIds || []).map(String))
       sortDraft.value = guide.value?.sort || 'default'
+      hideSdDraft.value = Boolean(guide.value?.hideSdSimulcasts)
       channelsModal.value = true
     }
 
@@ -3846,6 +3857,7 @@ const EpgView = {
           pinned_ids: pinnedDraft.value,
           hidden_ids: [...hiddenDraft.value],
           sort: sortDraft.value,
+          hide_sd_simulcasts: hideSdDraft.value,
         })
         channelsModal.value = false
         await reloadGuide()
@@ -3909,7 +3921,7 @@ const EpgView = {
       upcoming, seriesTags, seriesKey, cancelUpcoming, cancelSeriesTag, openSeriesTag,
       isActiveRecording: (r) => activeRecordingSet.value.has(String(r.id)),
       busyId, channelsModal, openChannelsModal, hiddenDraft, toggleHidden,
-      pinnedDraft, sortDraft, sortOptions, savingPrefs, saveChannelPrefs,
+      pinnedDraft, sortDraft, sortOptions, savingPrefs, saveChannelPrefs, hideSdDraft,
       togglePin, toggleDraftPin, movePin, draftName, rowShown, firstUnpinnedId,
       dropTargetId, dragPinId,
       onPinPointerDown, onPinPointerMove, onPinPointerUp, onPinPointerCancel,

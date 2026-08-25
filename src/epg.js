@@ -29,19 +29,53 @@ export const getGuideDay = async ({ day = 0 } = {}) => {
     fetchedAt: guide.fetchedAt,
     stale: Boolean(guide.stale),
     sort: prefs.sort,
+    hideSdSimulcasts: prefs.hideSdSimulcasts,
+    hiddenIds: prefs.hiddenIds,
     channels: orderChannels({ channels: guide.channels, ...prefs }),
     programs,
   }
 }
 
+// An SD channel is a simulcast sibling when another channel shares its base name
+// (name minus a trailing "HD", with AU aliases like Nine↔9) and that sibling is
+// the HD one. Anything unpaired stays visible.
+const SIMULCAST_ALIASES = { nine: '9', seven: '7', ten: '10' }
+
+const simulcastBaseKey = (name) => {
+  const base = (name || '').toLowerCase().replace(/\s*hd$/, '').trim()
+  return SIMULCAST_ALIASES[base] || base
+}
+
+const isHdChannel = (c) => c.hd === true || /hd$/i.test((c.name || '').trim())
+
+export const sdSimulcastIds = (channels) => {
+  const groups = new Map()
+  for (const c of channels) {
+    const key = simulcastBaseKey(c.name)
+    if (!key) continue
+    if (!groups.has(key)) groups.set(key, [])
+    groups.get(key).push(c)
+  }
+  const ids = new Set()
+  for (const group of groups.values()) {
+    if (group.length < 2 || !group.some(isHdChannel)) continue
+    for (const c of group) {
+      if (!isHdChannel(c)) ids.add(String(c.id))
+    }
+  }
+  return ids
+}
+
 // Pinned channels float to the top in pin order; the rest follow in the chosen
 // sort. Hidden and pinned are mutually exclusive (enforced on save).
-export const orderChannels = ({ channels, pinnedIds = [], hiddenIds = [], sort = 'default' }) => {
+export const orderChannels = ({ channels, pinnedIds = [], hiddenIds = [], sort = 'default', hideSdSimulcasts = false }) => {
   const hiddenSet = new Set(hiddenIds.map(String))
+  const simulcastSet = hideSdSimulcasts ? sdSimulcastIds(channels) : new Set()
   const pinOrder = new Map(pinnedIds.map((id, i) => [String(id), i]))
   const annotated = channels.map((c) => {
     const pinned = pinOrder.has(String(c.id))
-    return { ...c, pinned, hidden: !pinned && hiddenSet.has(String(c.id)) }
+    const id = String(c.id)
+    return { ...c, pinned, hidden: !pinned && (hiddenSet.has(id) || simulcastSet.has(id)) }
   })
   const pinned = annotated
     .filter((c) => c.pinned)
@@ -56,34 +90,39 @@ export const orderChannels = ({ channels, pinnedIds = [], hiddenIds = [], sort =
 }
 
 export const getChannelPrefs = async () => {
-  const [pinnedRaw, hiddenRaw, sortRaw] = await Promise.all([
+  const [pinnedRaw, hiddenRaw, sortRaw, hideSdRaw] = await Promise.all([
     getSetting('epg_pinned_channels'),
     getSetting('epg_hidden_channels'),
     getSetting('epg_channel_sort'),
+    getSetting('epg_hide_sd_simulcasts'),
   ])
   return {
     pinnedIds: parseJsonArray(pinnedRaw),
     hiddenIds: parseJsonArray(hiddenRaw),
     sort: CHANNEL_SORTS.includes(sortRaw) ? sortRaw : 'default',
+    hideSdSimulcasts: hideSdRaw === '1',
   }
 }
 
 // Partial update; pinning a channel unhides it, hiding one unpins it.
-export const setChannelPrefs = async ({ pinnedIds, hiddenIds, sort } = {}) => {
+export const setChannelPrefs = async ({ pinnedIds, hiddenIds, sort, hideSdSimulcasts } = {}) => {
   const current = await getChannelPrefs()
   const next = {
     pinnedIds: pinnedIds ?? current.pinnedIds,
     hiddenIds: hiddenIds ?? current.hiddenIds,
     sort: sort ?? current.sort,
+    hideSdSimulcasts: hideSdSimulcasts ?? current.hideSdSimulcasts,
   }
   if (!CHANNEL_SORTS.includes(next.sort)) next.sort = 'default'
   const pinnedSet = new Set(next.pinnedIds.map(String))
   next.hiddenIds = next.hiddenIds.map(String).filter((id) => !pinnedSet.has(id))
   next.pinnedIds = next.pinnedIds.map(String)
+  next.hideSdSimulcasts = Boolean(next.hideSdSimulcasts)
   await Promise.all([
     setSetting('epg_pinned_channels', JSON.stringify(next.pinnedIds)),
     setSetting('epg_hidden_channels', JSON.stringify(next.hiddenIds)),
     setSetting('epg_channel_sort', next.sort),
+    setSetting('epg_hide_sd_simulcasts', next.hideSdSimulcasts ? '1' : '0'),
   ])
   return next
 }
@@ -209,9 +248,12 @@ export const searchGuide = async ({ q } = {}) => {
   const needle = (q || '').trim().toLowerCase()
   if (needle.length < 2) return { results: [] }
   const guide = await getCachedGuide()
+  const prefs = await getChannelPrefs()
+  const searchChannels = orderChannels({ channels: guide.channels, ...prefs })
+    .filter((c) => !c.hidden)
   const nowMs = Date.now()
   const results = []
-  for (const channel of guide.channels) {
+  for (const channel of searchChannels) {
     const rows = guide.programsByChannel[String(channel.epgId)] || []
     for (const p of rows) {
       if (p.end <= nowMs) continue

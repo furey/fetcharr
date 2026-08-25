@@ -80,6 +80,13 @@ body {
   }
 }
 
+.btn-glyph {
+  display: inline-block;
+  font-size: 1.15em;
+  line-height: 1;
+  vertical-align: -0.09em;
+}
+
 .spinner {
   display: inline-block;
   width: 0.9em;

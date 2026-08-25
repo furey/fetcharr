@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { projectUpcomingRecordings } from '../src/epg.js'
+import { projectUpcomingRecordings, orderChannels } from '../src/epg.js'
 
 const NOW = 1_000_000_000_000
 const HOUR = 3_600_000
@@ -95,4 +95,34 @@ test('projectUpcomingRecordings: merged list is sorted by start time', () => {
   const out = projectUpcomingRecordings({ seriesTags, futureRecordings, guide, nowMs: NOW })
   const starts = out.map((r) => r.startDate)
   assert.deepEqual(starts, [...starts].sort((a, b) => a - b))
+})
+
+const { sdSimulcastIds } = await import('../src/epg.js')
+
+test('sdSimulcastIds: pairs HD/SD by base name including AU aliases, leaves unpaired alone', () => {
+  const ids = sdSimulcastIds([
+    { id: 'abc-hd', name: 'ABC TV HD', hd: true },
+    { id: 'abc-sd', name: 'ABC TV' },
+    { id: 'ten-hd', name: '10 HD', hd: true },
+    { id: 'ten-sd', name: '10' },
+    { id: 'nine-hd', name: '9HD', hd: true },
+    { id: 'nine-sd', name: 'Nine' },
+    { id: 'entertains', name: 'ABC Entertains' },
+    { id: 'sbs2-hd', name: 'SBS2 HD', hd: true },
+  ])
+  assert.deepEqual([...ids].sort(), ['abc-sd', 'nine-sd', 'ten-sd'])
+})
+
+test('orderChannels: hideSdSimulcasts hides SD twins but never pinned ones', () => {
+  const channels = [
+    { id: 'hd', name: '10 HD', hd: true },
+    { id: 'sd', name: '10' },
+    { id: 'pin-sd', name: 'Nine' },
+    { id: 'pin-hd', name: '9HD', hd: true },
+  ]
+  const out = orderChannels({ channels, pinnedIds: ['pin-sd'], hideSdSimulcasts: true })
+  const by = Object.fromEntries(out.map((c) => [c.id, c.hidden]))
+  assert.equal(by['sd'], true)
+  assert.equal(by['hd'], false)
+  assert.equal(by['pin-sd'], false)
 })
