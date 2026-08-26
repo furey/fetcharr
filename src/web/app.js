@@ -61,7 +61,10 @@ const tz = ref('UTC')
 const fmtTime = (s) => {
   if (!s) return ''
   const iso = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(s) ? `${s.replace(' ', 'T')}Z` : s
-  return new Date(iso).toLocaleString('en-AU', { timeZone: tz.value, hour12: true })
+  return new Intl.DateTimeFormat('en-AU', {
+    timeZone: tz.value, day: '2-digit', month: '2-digit', year: '2-digit',
+    hour: 'numeric', minute: '2-digit', hour12: true,
+  }).format(new Date(iso)).replace(', ', ' ').replace(/\s(am|pm)$/, '$1')
 }
 
 const plexSummary = (p) => {
@@ -3341,7 +3344,7 @@ const EpgView = {
     const fmtDayTime = (ms) => new Intl.DateTimeFormat('en-AU', {
       timeZone: tz.value, weekday: 'short', day: 'numeric', month: 'short',
       hour: 'numeric', minute: '2-digit',
-    }).format(new Date(ms)).toLowerCase()
+    }).format(new Date(ms)).toLowerCase().replace(/\s(am|pm)$/, '$1')
 
     const fmtShortRange = (start, end) => {
       const day = new Intl.DateTimeFormat('en-AU', {
