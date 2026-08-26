@@ -61,7 +61,10 @@ const tz = ref('UTC')
 const fmtTime = (s) => {
   if (!s) return ''
   const iso = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(s) ? `${s.replace(' ', 'T')}Z` : s
-  return new Date(iso).toLocaleString('en-AU', { timeZone: tz.value, hour12: true })
+  return new Intl.DateTimeFormat('en-AU', {
+    timeZone: tz.value, day: '2-digit', month: '2-digit', year: '2-digit',
+    hour: 'numeric', minute: '2-digit', hour12: true,
+  }).format(new Date(iso)).replace(', ', ' ').replace(/\s(am|pm)$/, '$1')
 }
 
 const plexSummary = (p) => {
@@ -715,7 +718,7 @@ const ShowsView = {
             </article>
           </div>
           <p v-else class="text-ink-dim text-sm">
-            No tracked shows yet — add one below to start tracking.
+            No shows tracked yet — add one below to start tracking.
           </p>
         </div>
       </section>
@@ -983,7 +986,7 @@ const SyncsView = {
             <div class="chip-row md:flex-wrap">
               <button v-for="opt in filterOptions" :key="opt.key"
                 type="button"
-                :class="['btn', 'btn-sm', filter === opt.key ? 'btn-primary' : '']"
+                :class="['btn', 'btn-sm', filter === opt.key ? 'btn-on' : '']"
                 @click="setFilter(opt.key)">{{ opt.label }}</button>
             </div>
           </div>
@@ -1155,7 +1158,7 @@ const RecordingsView = {
               <div class="chip-row md:flex-wrap">
                 <button v-for="opt in statusOptions" :key="opt"
                   type="button"
-                  :class="['btn', 'btn-sm', statusFilter === opt ? 'btn-primary' : '']"
+                  :class="['btn', 'btn-sm', statusFilter === opt ? 'btn-on' : '']"
                   @click="setStatus(opt)">{{ opt.toUpperCase() }}</button>
               </div>
             </div>
@@ -1172,7 +1175,7 @@ const RecordingsView = {
               <div class="chip-row md:flex-wrap">
                 <button v-for="opt in sinceOptions" :key="opt.key"
                   type="button"
-                  :class="['btn', 'btn-sm', sinceFilter === opt.key ? 'btn-primary' : '']"
+                  :class="['btn', 'btn-sm', sinceFilter === opt.key ? 'btn-on' : '']"
                   @click="setSince(opt.key)">{{ opt.label }}</button>
               </div>
             </div>
@@ -1181,7 +1184,7 @@ const RecordingsView = {
               <div class="chip-row md:flex-wrap">
                 <button v-for="opt in deletedOptions" :key="opt.key"
                   type="button"
-                  :class="['btn', 'btn-sm', deletedFilter === opt.key ? 'btn-primary' : '']"
+                  :class="['btn', 'btn-sm', deletedFilter === opt.key ? 'btn-on' : '']"
                   @click="setDeleted(opt.key)">{{ opt.label }}</button>
               </div>
             </div>
@@ -2732,10 +2735,10 @@ const EpgView = {
           <div class="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-center md:gap-x-6">
             <div class="chip-row md:flex-wrap">
               <button v-for="m in modes" :key="m.key" type="button"
-                :class="['btn', 'btn-sm', mode === m.key ? 'btn-primary' : '']"
+                :class="['btn', 'btn-sm', mode === m.key ? 'btn-on' : '']"
                 @click="setMode(m.key)">{{ m.label }}</button>
             </div>
-            <div class="flex-1 min-w-[12rem] md:max-w-xs">
+            <div class="flex-1 min-w-[12rem] md:max-w-xs md:ml-auto">
               <input v-model="searchQ" type="search" class="field-input" :placeholder="searchPlaceholder"
                 style="padding-top: 0.35rem; padding-bottom: 0.35rem;" />
             </div>
@@ -2775,11 +2778,11 @@ const EpgView = {
                 <span class="text-xs font-mono uppercase tracking-[0.16em] text-ink-dim">DAY</span>
                 <div class="chip-row md:flex-wrap">
                   <button v-for="d in dayChips" :key="d.day" type="button"
-                    :class="['btn', 'btn-sm', day === d.day ? 'btn-primary' : '']"
+                    :class="['btn', 'btn-sm', day === d.day ? 'btn-on' : '']"
                     @click="setDay(d.day)">{{ d.label }}</button>
                 </div>
               </div>
-              <div class="flex items-center gap-2">
+              <div class="flex items-center gap-2 md:ml-auto">
                 <span class="text-xs font-mono uppercase tracking-[0.16em] text-ink-dim">JUMP</span>
                 <div class="chip-row">
                   <button type="button" class="btn btn-sm" @click="jumpNow">NOW</button>
@@ -2968,14 +2971,14 @@ const EpgView = {
         <section class="panel epg-modal">
           <header class="panel-header">
             <span class="panel-title">{{ selected.program.title }}</span>
-            <button type="button" class="btn btn-sm btn-icon" @click="closeModal" aria-label="Close">✕</button>
+            <button type="button" class="btn btn-sm btn-icon epg-modal-x" @click="closeModal" aria-label="Close">✕</button>
           </header>
           <div class="panel-body space-y-4">
             <img v-if="modalChannel?.thumb" class="epg-modal-art" :src="'/api/epg/artwork/' + modalChannel.id"
               alt="" @error="$event.target.style.display = 'none'" />
             <p class="text-sm font-mono text-ink-dim">
               {{ selected.channel?.name || channelName(selected.program.channelId) }}<template v-if="selected.program.start"> ·
-              {{ fmtDayTime(selected.program.start) }}–{{ fmtClock(selected.program.end) }}</template>
+              <span class="hidden md:inline">{{ fmtDayTime(selected.program.start) }}–{{ fmtClock(selected.program.end) }}</span><span class="md:hidden">{{ fmtShortRange(selected.program.start, selected.program.end) }}</span></template>
               <template v-if="ratingLabel(selected.program)"> · {{ ratingLabel(selected.program) }}</template>
               <template v-if="seLabel(selected.program)"> · {{ seLabel(selected.program) }}</template>
             </p>
@@ -3007,7 +3010,8 @@ const EpgView = {
                 </select>
               </div>
             </div>
-            <div class="flex flex-wrap items-center justify-end gap-2 pt-1">
+            <div class="epg-modal-actions flex flex-wrap items-center justify-end gap-2 pt-1">
+              <button type="button" class="btn btn-sm epg-modal-close mr-auto" @click="closeModal" aria-label="Close">✕ CLOSE</button>
               <template v-if="cellState(selected.program) === 'scheduled' || cellState(selected.program) === 'recording'">
                 <template v-if="isSeriesScheduled(selected.program) && cancelChoice">
                   <span class="text-xs font-mono text-ink-mute">This is part of a series recording — cancel what?</span>
@@ -3057,7 +3061,7 @@ const EpgView = {
         <section class="panel epg-modal">
           <header class="panel-header">
             <span class="panel-title">CHANNELS</span>
-            <button type="button" class="btn btn-sm btn-icon" @click="channelsModal = false" aria-label="Close">✕</button>
+            <button type="button" class="btn btn-sm btn-icon epg-modal-x" @click="channelsModal = false" aria-label="Close">✕</button>
           </header>
           <div class="panel-body space-y-5">
             <div>
@@ -3083,7 +3087,7 @@ const EpgView = {
               <label class="field-label">SORT UNPINNED CHANNELS BY</label>
               <div class="chip-row">
                 <button v-for="s in sortOptions" :key="s.key" type="button"
-                  :class="['btn', 'btn-sm', sortDraft === s.key ? 'btn-primary' : '']"
+                  :class="['btn', 'btn-sm', sortDraft === s.key ? 'btn-on' : '']"
                   @click="sortDraft = s.key">{{ s.label }}</button>
               </div>
             </div>
@@ -3116,7 +3120,7 @@ const EpgView = {
                 </div>
               </div>
             </div>
-            <div class="flex items-center justify-end gap-2 pt-1">
+            <div class="epg-modal-actions flex items-center justify-end gap-2 pt-1">
               <button type="button" class="btn btn-sm" @click="channelsModal = false">CANCEL</button>
               <button type="button" class="btn btn-sm btn-primary" @click="saveChannelPrefs" :disabled="savingPrefs">
                 {{ savingPrefs ? 'SAVING…' : 'SAVE' }}
@@ -3340,7 +3344,17 @@ const EpgView = {
     const fmtDayTime = (ms) => new Intl.DateTimeFormat('en-AU', {
       timeZone: tz.value, weekday: 'short', day: 'numeric', month: 'short',
       hour: 'numeric', minute: '2-digit',
-    }).format(new Date(ms)).toLowerCase()
+    }).format(new Date(ms)).toLowerCase().replace(/\s(am|pm)$/, '$1')
+
+    const fmtShortRange = (start, end) => {
+      const day = new Intl.DateTimeFormat('en-AU', {
+        timeZone: tz.value, weekday: 'short', day: '2-digit', month: '2-digit',
+      }).format(new Date(start)).toLowerCase().replace(',', '')
+      const from = fmtClock(start).replace(':00', '')
+      const to = fmtClock(end).replace(':00', '')
+      const trimmed = from.slice(-2) === to.slice(-2) ? from.replace(/(am|pm)$/, '') : from
+      return `${day} @ ${trimmed}–${to}`
+    }
 
     const ratingLabel = (p) => {
       const r = p?.rating
@@ -3938,7 +3952,7 @@ const EpgView = {
       dropTargetId, dragPinId,
       onPinPointerDown, onPinPointerMove, onPinPointerUp, onPinPointerCancel,
       onRailResizeDown, onRailResizeMove, onRailResizeUp,
-      channelById, channelName, fmtClock, fmtDayTime, seLabel, ratingLabel, tsOf,
+      channelById, channelName, fmtClock, fmtDayTime, fmtShortRange, seLabel, ratingLabel, tsOf,
       flashText, flashKind,
     }
   },
@@ -4011,7 +4025,7 @@ const App = {
 
       <footer class="border-t border-hairline">
         <div class="max-w-6xl mx-auto px-4 md:px-6 py-4 flex flex-wrap items-center justify-between gap-3 text-xs font-mono text-ink-mute">
-          <span><a href="/#dashboard" class="no-underline text-ink">Fetcharr</a> · self-hosted sync from your Fetch TV box to Plex</span>
+          <span><a href="/#dashboard" class="no-underline text-ink">Fetcharr</a> · self-hosted fetch tv → plex bridge</span>
           <a
             href="https://github.com/furey/fetcharr"
             target="_blank"

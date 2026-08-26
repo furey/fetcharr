@@ -313,6 +313,18 @@ table.deck-table tbody tr.tombstone .progress {
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
+input[type="search"]::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 0.75em;
+  height: 0.75em;
+  margin-left: 0.4em;
+  cursor: pointer;
+  background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M2 2l12 12M14 2L2 14' stroke='black' stroke-width='2.5' stroke-linecap='round'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M2 2l12 12M14 2L2 14' stroke='black' stroke-width='2.5' stroke-linecap='round'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
 .field-input::placeholder {
   color: #544e47;
 }
@@ -383,6 +395,31 @@ table.deck-table tbody tr.tombstone .progress {
     border-color: #f10c69;
     color: #f10c69;
     background: rgba(241, 12, 105, 0.06);
+  }
+}
+
+.btn-on {
+  background: #3d3829;
+  border-color: #3d3829;
+  color: #fffcfb;
+}
+
+.btn-on::after {
+  content: "";
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  bottom: 3px;
+  height: 2px;
+  background: linear-gradient(to right, transparent, #009be4 25%, #009be4 75%, transparent);
+  box-shadow: 0 0 10px rgba(0, 155, 228, 0.45);
+}
+
+@media (hover: hover) {
+  .btn-on:hover:not(:disabled) {
+    border-color: #3d3829;
+    color: #fffcfb;
+    background: #3d3829;
   }
 }
 
@@ -1236,5 +1273,130 @@ body.epg-drag-lock * {
 
   .epg-pin {
     padding: 0.5rem 0.3rem;
+  }
+}
+
+.epg-modal-close {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .epg-modal-x {
+    display: none;
+  }
+
+  .epg-modal-close {
+    display: inline-flex;
+  }
+
+  .panel-title {
+    font-size: 0.7rem;
+    letter-spacing: 0.14em;
+  }
+
+  .deck-card {
+    padding: 0.75rem 0.85rem;
+  }
+
+  .deck-card-title {
+    display: block;
+    min-width: 0;
+    font-size: 0.8rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .deck-card-meta {
+    font-size: 0.68rem;
+  }
+
+  .deck-card-meta > span:last-child {
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .pill {
+    font-size: 0.62rem;
+    padding: 0.1rem 0.5rem;
+  }
+
+  .btn {
+    min-height: 2.1rem;
+    padding-top: 0.25rem;
+    padding-bottom: 0.25rem;
+    font-size: 0.74rem;
+  }
+
+  .btn-sm {
+    min-height: 1.9rem;
+    padding-top: 0.15rem;
+    padding-bottom: 0.15rem;
+    font-size: 0.66rem;
+  }
+
+  .btn-icon {
+    min-width: 2rem;
+  }
+
+  .status-readout {
+    font-size: 0.75rem;
+  }
+
+  .field-label {
+    font-size: 0.66rem;
+  }
+
+  .epg-cell-title {
+    font-size: 0.7rem;
+  }
+
+  .epg-cell-meta {
+    font-size: 0.58rem;
+  }
+
+  .epg-rail-name {
+    font-size: 0.66rem;
+  }
+
+  .epg-tick {
+    font-size: 0.62rem;
+  }
+
+  .epg-modal .panel-header {
+    flex-wrap: nowrap;
+    gap: 0.75rem;
+  }
+
+  .epg-modal .panel-title {
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .epg-modal .panel-body {
+    padding: 0.9rem 1rem 0;
+  }
+
+  .epg-modal .panel-body .text-sm {
+    font-size: 0.75rem;
+  }
+
+  .epg-modal-actions {
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
+    margin: 0 -1rem;
+    padding: 0.6rem 1rem calc(env(safe-area-inset-bottom, 0px) + 0.6rem);
+    background: #28231b;
+    box-shadow: 0 -8px 16px -10px rgba(0, 0, 0, 0.6);
+  }
+
+  .epg-modal {
+    padding-bottom: 0;
   }
 }

@@ -48,7 +48,7 @@ Press the ★ next to a channel in the rail to pin it; the row animates up into 
 
 ## On a phone
 
-The guide works in the phone browser: the channel rail narrows, programme and channel dialogs open as bottom sheets, and the rail cells drag to reorder pins by touch. On iOS, add Fetcharr to the Home Screen (Share → Add to Home Screen) to run it full-screen without Safari's toolbar; in Safari itself the sheets are sized so their buttons stay above the toolbar.
+The guide works in the phone browser: the channel rail narrows, programme and channel dialogs open as bottom sheets, and the rail cells drag to reorder pins by touch. A sheet's buttons (CLOSE, RECORD, CANCEL) sit in a row pinned to its bottom edge, so they stay visible while the sheet content scrolls. On iOS, add Fetcharr to the Home Screen (Share → Add to Home Screen) to run it full-screen without Safari's toolbar; in Safari itself the sheets are sized so that row stays above the toolbar.
 
 ## On the dashboard
 
