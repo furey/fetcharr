@@ -201,11 +201,11 @@ The Fetch TV box IP/port and all integration credentials (Plex token, Fetch clou
 
 Compose-only env (set in `.env` alongside `docker-compose.yml`):
 
-| Variable          | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `FETCHARR_PORT`   | Host port the container binds (under `network_mode: host`, also flows into `PORT` inside the container). Defaults to `8124`.                                                                                                                                                                                                                                                                                                                                                                                     |
-| `CONFIG_PATH`     | Host root for the SQLite state bind mount. The container's `/config` is `${CONFIG_PATH}/fetcharr`.                                                                                                                                                                                                                                                                                                                                                                                                               |
-| `DATA_PATH`       | Host root for media bind mounts. The container's `/media/tv` is `${DATA_PATH}/media/tv`.                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| Variable          | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `FETCHARR_PORT`   | Host port the container binds (under `network_mode: host`, also flows into `PORT` inside the container). Defaults to `8124`.                                                                                                                                                                                                                                                                                                                                                                                 |
+| `CONFIG_PATH`     | Host root for the SQLite state bind mount. The container's `/config` is `${CONFIG_PATH}/fetcharr`.                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `DATA_PATH`       | Host root for media bind mounts. The container's `/media/tv` is `${DATA_PATH}/media/tv`.                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | `PLEX_PREFS_PATH` | Optional. Host path to Plex's `Preferences.xml`, bind-mounted read-only into the container so the "Auto-detect from local Plex" button can read `PlexOnlineToken`. Drop the bind-mount entirely from your compose if Plex isn't on this host; the auto-detect button degrades gracefully, and you can paste the token manually from `app.plex.tv`. Inside the container, the path defaults to `/plex-preferences.xml` and is overridable as the `plex_prefs_path` runtime setting (Settings panel for Plex). |
 
 ## Docker deployment
@@ -326,15 +326,15 @@ fetcharr/
 
 ## Scripts
 
-| Script                    | What it does                                                                               |
-| ------------------------- | ------------------------------------------------------------------------------------------ |
-| `npm run setup`           | `npm ci --ignore-scripts` → `npm run rebuild:natives` → `npm audit signatures`             |
-| `npm run rebuild:natives` | Explicitly rebuilds the native deps allow-listed in `package.json` (just `better-sqlite3`) |
-| `npm run migrate`         | `mkdir -p config && knex migrate:latest`; idempotent, auto-run by `start` / `dev`          |
-| `npm run migrate:refresh` | `rm -f ./config/state.db && mkdir -p config && knex migrate:latest`; dev only              |
-| `npm start`               | `node --env-file-if-exists=.env src/server.js` (chains `npm run migrate` via `prestart`)   |
+| Script                    | What it does                                                                                   |
+| ------------------------- | ---------------------------------------------------------------------------------------------- |
+| `npm run setup`           | `npm ci --ignore-scripts` → `npm run rebuild:natives` → `npm audit signatures`                 |
+| `npm run rebuild:natives` | Explicitly rebuilds the native deps allow-listed in `package.json` (just `better-sqlite3`)     |
+| `npm run migrate`         | `mkdir -p config && knex migrate:latest`; idempotent, auto-run by `start` / `dev`              |
+| `npm run migrate:refresh` | `rm -f ./config/state.db && mkdir -p config && knex migrate:latest`; dev only                  |
+| `npm start`               | `node --env-file-if-exists=.env src/server.js` (chains `npm run migrate` via `prestart`)       |
 | `npm run dev`             | `node --env-file-if-exists=.env --watch src/server.js` (chains `npm run migrate` via `predev`) |
-| `npm test`                | `node --test 'test/*.test.js'`; Node 22 built-in runner, no extra deps                     |
+| `npm test`                | `node --test 'test/*.test.js'`; Node 22 built-in runner, no extra deps                         |
 
 ## Testing
 

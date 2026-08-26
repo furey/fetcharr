@@ -91,9 +91,9 @@ If your media stack is Fetch TV → Plex, Fetcharr is the automation in between:
 
 ## Features
 
-- **TV Guide**: a 7-day programme guide in the browser; schedule, cancel, and series-record on the box (with padding and episodes-to-keep options), search the week, pin and reorder favourite channels, and see what's on now from the dashboard. Uses your Fetch cloud login; no Fetch mobile app needed.
 - **Zero-config discovery**: finds your Fetch TV box (SSDP) and Plex server (GDM) on the LAN, and auto-detects the Plex token from a bind-mounted `Preferences.xml`.
 - **First-run wizard**: walks Fetch box → storage → Plex → optional Fetch Cloud. Re-openable from Settings; previously-saved values prefill.
+- **TV Guide**: a 7-day programme guide in the browser; schedule, cancel, and series-record on the box (with padding and episodes-to-keep options), search the week, pin and reorder favourite channels, and see what's on now from the dashboard. Uses your Fetch cloud login; no Fetch mobile app needed.
 - **Per-show follow**: pick a Fetch show, match it by name to an existing folder under your media root (even when the names aren't identical), and set a season template.
 - **Scheduled + manual sync**: checks the box on a schedule you set (a cron expression), plus on-demand Sync now for everything or a single show.
 - **In-progress recording protection**: refuses to download a half-recorded show. Fetch reports the wrong size while a recording is live; Fetcharr spots the tell-tale values (and double-checks the stale file details the box serves over DLNA) so you never end up with incomplete files.
