@@ -39,7 +39,7 @@
 
 ## Demo
 
-<https://gist.github.com/user-attachments/assets/90c8c96b-1900-4b15-8c14-b7c3d0b219c7>
+<https://gist.github.com/user-attachments/assets/242d010c-85c2-4cb6-96a3-ffa79a424bde>
 
 ## What Fetcharr is
 
