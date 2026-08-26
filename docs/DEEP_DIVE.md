@@ -177,7 +177,9 @@ The rest is a CSS pass in `styles.css`, all standard iOS Safari accommodations:
 - `.field-input` bumps to `16 px` below `md`; iOS auto-zooms (and stays zoomed) on focusing any input smaller than that.
 - `viewport-fit=cover` in the meta tag plus `env(safe-area-inset-bottom)` on the settings save bar and footer, so the home indicator doesn't cover the SAVE button; `min-h-dvh` instead of `min-h-screen` for the collapsing URL bar.
 - Every `:hover` rule is scoped inside `@media (hover: hover)`; otherwise taps leave sticky hover states.
-- Under `@media (pointer: coarse)`, buttons and checkboxes grow to Apple's 44 pt hit-target guideline (padding only; icon sizes unchanged).
+- Under `@media (pointer: coarse)`, buttons and checkboxes grow toward Apple's 44 pt hit-target guideline; a later `max-width: 767px` block (which wins the cascade by source order) re-tightens button heights to `2.1 rem`/`1.9 rem` and shrinks card, pill, and panel type after real-device feedback that the guideline sizes felt oversized at 390 px.
+- Selected chips (day, mode, and filter groups) use `.btn-on`: a pressed segment with a solid raised background and the nav tab's blue LED underline. Blue-tinted `btn-primary` always means an action (SYNC NOW, SAVE, RECORD); state and action no longer share a style.
+- List datetimes come from `fmtTime` as `26/08/26 10:30am`: 2-digit year, no seconds, `am`/`pm` attached, and a non-breaking space between date and time so the value never wraps mid-datetime.
 - `-webkit-tap-highlight-color: transparent`, since controls have their own pressed states.
 
 ## Full environment reference
