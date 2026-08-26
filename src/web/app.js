@@ -715,7 +715,7 @@ const ShowsView = {
             </article>
           </div>
           <p v-else class="text-ink-dim text-sm">
-            No tracked shows yet — add one below to start tracking.
+            No shows tracked yet — add one below to start tracking.
           </p>
         </div>
       </section>
@@ -2975,7 +2975,7 @@ const EpgView = {
               alt="" @error="$event.target.style.display = 'none'" />
             <p class="text-sm font-mono text-ink-dim">
               {{ selected.channel?.name || channelName(selected.program.channelId) }}<template v-if="selected.program.start"> ·
-              {{ fmtDayTime(selected.program.start) }}–{{ fmtClock(selected.program.end) }}</template>
+              <span class="hidden md:inline">{{ fmtDayTime(selected.program.start) }}–{{ fmtClock(selected.program.end) }}</span><span class="md:hidden">{{ fmtShortRange(selected.program.start, selected.program.end) }}</span></template>
               <template v-if="ratingLabel(selected.program)"> · {{ ratingLabel(selected.program) }}</template>
               <template v-if="seLabel(selected.program)"> · {{ seLabel(selected.program) }}</template>
             </p>
@@ -3007,7 +3007,7 @@ const EpgView = {
                 </select>
               </div>
             </div>
-            <div class="flex flex-wrap items-center justify-end gap-2 pt-1">
+            <div class="epg-modal-actions flex flex-wrap items-center justify-end gap-2 pt-1">
               <button type="button" class="btn btn-sm epg-modal-close mr-auto" @click="closeModal" aria-label="Close">✕ CLOSE</button>
               <template v-if="cellState(selected.program) === 'scheduled' || cellState(selected.program) === 'recording'">
                 <template v-if="isSeriesScheduled(selected.program) && cancelChoice">
@@ -3117,7 +3117,7 @@ const EpgView = {
                 </div>
               </div>
             </div>
-            <div class="flex items-center justify-end gap-2 pt-1">
+            <div class="epg-modal-actions flex items-center justify-end gap-2 pt-1">
               <button type="button" class="btn btn-sm" @click="channelsModal = false">CANCEL</button>
               <button type="button" class="btn btn-sm btn-primary" @click="saveChannelPrefs" :disabled="savingPrefs">
                 {{ savingPrefs ? 'SAVING…' : 'SAVE' }}
@@ -3342,6 +3342,16 @@ const EpgView = {
       timeZone: tz.value, weekday: 'short', day: 'numeric', month: 'short',
       hour: 'numeric', minute: '2-digit',
     }).format(new Date(ms)).toLowerCase()
+
+    const fmtShortRange = (start, end) => {
+      const day = new Intl.DateTimeFormat('en-AU', {
+        timeZone: tz.value, weekday: 'short', day: '2-digit', month: '2-digit',
+      }).format(new Date(start)).toLowerCase().replace(',', '')
+      const from = fmtClock(start).replace(':00', '')
+      const to = fmtClock(end).replace(':00', '')
+      const trimmed = from.slice(-2) === to.slice(-2) ? from.replace(/(am|pm)$/, '') : from
+      return `${day} @ ${trimmed}–${to}`
+    }
 
     const ratingLabel = (p) => {
       const r = p?.rating
@@ -3939,7 +3949,7 @@ const EpgView = {
       dropTargetId, dragPinId,
       onPinPointerDown, onPinPointerMove, onPinPointerUp, onPinPointerCancel,
       onRailResizeDown, onRailResizeMove, onRailResizeUp,
-      channelById, channelName, fmtClock, fmtDayTime, seLabel, ratingLabel, tsOf,
+      channelById, channelName, fmtClock, fmtDayTime, fmtShortRange, seLabel, ratingLabel, tsOf,
       flashText, flashKind,
     }
   },
@@ -4012,7 +4022,7 @@ const App = {
 
       <footer class="border-t border-hairline">
         <div class="max-w-6xl mx-auto px-4 md:px-6 py-4 flex flex-wrap items-center justify-between gap-3 text-xs font-mono text-ink-mute">
-          <span><a href="/#dashboard" class="no-underline text-ink">Fetcharr</a> · self-hosted sync from your Fetch TV box to Plex</span>
+          <span><a href="/#dashboard" class="no-underline text-ink">Fetcharr</a> · self-hosted fetch tv → plex bridge</span>
           <a
             href="https://github.com/furey/fetcharr"
             target="_blank"

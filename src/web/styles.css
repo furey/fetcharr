@@ -1287,21 +1287,21 @@ body.epg-drag-lock * {
   }
 
   .btn {
-    min-height: 2.5rem;
-    padding-top: 0.4rem;
-    padding-bottom: 0.4rem;
+    min-height: 2.1rem;
+    padding-top: 0.25rem;
+    padding-bottom: 0.25rem;
     font-size: 0.74rem;
   }
 
   .btn-sm {
-    min-height: 2.25rem;
-    padding-top: 0.25rem;
-    padding-bottom: 0.25rem;
+    min-height: 1.9rem;
+    padding-top: 0.15rem;
+    padding-bottom: 0.15rem;
     font-size: 0.66rem;
   }
 
   .btn-icon {
-    min-width: 2.25rem;
+    min-width: 2rem;
   }
 
   .status-readout {
@@ -1342,6 +1342,24 @@ body.epg-drag-lock * {
   }
 
   .epg-modal .panel-body {
-    padding: 0.9rem 1rem;
+    padding: 0.9rem 1rem 0;
+  }
+
+  .epg-modal .panel-body .text-sm {
+    font-size: 0.75rem;
+  }
+
+  .epg-modal-actions {
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
+    margin: 0 -1rem;
+    padding: 0.6rem 1rem calc(env(safe-area-inset-bottom, 0px) + 0.6rem);
+    background: #28231b;
+    box-shadow: 0 -8px 16px -10px rgba(0, 0, 0, 0.6);
+  }
+
+  .epg-modal {
+    padding-bottom: 0;
   }
 }
