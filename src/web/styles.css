@@ -386,6 +386,31 @@ table.deck-table tbody tr.tombstone .progress {
   }
 }
 
+.btn-on {
+  background: #3d3829;
+  border-color: #3d3829;
+  color: #fffcfb;
+}
+
+.btn-on::after {
+  content: "";
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  bottom: 3px;
+  height: 2px;
+  background: linear-gradient(to right, transparent, #009be4 25%, #009be4 75%, transparent);
+  box-shadow: 0 0 10px rgba(0, 155, 228, 0.45);
+}
+
+@media (hover: hover) {
+  .btn-on:hover:not(:disabled) {
+    border-color: #3d3829;
+    color: #fffcfb;
+    background: #3d3829;
+  }
+}
+
 .btn-sm {
   padding: 0.3rem 0.65rem;
   font-size: 0.7rem;

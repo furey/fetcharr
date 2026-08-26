@@ -983,7 +983,7 @@ const SyncsView = {
             <div class="chip-row md:flex-wrap">
               <button v-for="opt in filterOptions" :key="opt.key"
                 type="button"
-                :class="['btn', 'btn-sm', filter === opt.key ? 'btn-primary' : '']"
+                :class="['btn', 'btn-sm', filter === opt.key ? 'btn-on' : '']"
                 @click="setFilter(opt.key)">{{ opt.label }}</button>
             </div>
           </div>
@@ -1155,7 +1155,7 @@ const RecordingsView = {
               <div class="chip-row md:flex-wrap">
                 <button v-for="opt in statusOptions" :key="opt"
                   type="button"
-                  :class="['btn', 'btn-sm', statusFilter === opt ? 'btn-primary' : '']"
+                  :class="['btn', 'btn-sm', statusFilter === opt ? 'btn-on' : '']"
                   @click="setStatus(opt)">{{ opt.toUpperCase() }}</button>
               </div>
             </div>
@@ -1172,7 +1172,7 @@ const RecordingsView = {
               <div class="chip-row md:flex-wrap">
                 <button v-for="opt in sinceOptions" :key="opt.key"
                   type="button"
-                  :class="['btn', 'btn-sm', sinceFilter === opt.key ? 'btn-primary' : '']"
+                  :class="['btn', 'btn-sm', sinceFilter === opt.key ? 'btn-on' : '']"
                   @click="setSince(opt.key)">{{ opt.label }}</button>
               </div>
             </div>
@@ -1181,7 +1181,7 @@ const RecordingsView = {
               <div class="chip-row md:flex-wrap">
                 <button v-for="opt in deletedOptions" :key="opt.key"
                   type="button"
-                  :class="['btn', 'btn-sm', deletedFilter === opt.key ? 'btn-primary' : '']"
+                  :class="['btn', 'btn-sm', deletedFilter === opt.key ? 'btn-on' : '']"
                   @click="setDeleted(opt.key)">{{ opt.label }}</button>
               </div>
             </div>
@@ -2732,10 +2732,10 @@ const EpgView = {
           <div class="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-center md:gap-x-6">
             <div class="chip-row md:flex-wrap">
               <button v-for="m in modes" :key="m.key" type="button"
-                :class="['btn', 'btn-sm', mode === m.key ? 'btn-primary' : '']"
+                :class="['btn', 'btn-sm', mode === m.key ? 'btn-on' : '']"
                 @click="setMode(m.key)">{{ m.label }}</button>
             </div>
-            <div class="flex-1 min-w-[12rem] md:max-w-xs">
+            <div class="flex-1 min-w-[12rem] md:max-w-xs md:ml-auto">
               <input v-model="searchQ" type="search" class="field-input" :placeholder="searchPlaceholder"
                 style="padding-top: 0.35rem; padding-bottom: 0.35rem;" />
             </div>
@@ -2775,11 +2775,11 @@ const EpgView = {
                 <span class="text-xs font-mono uppercase tracking-[0.16em] text-ink-dim">DAY</span>
                 <div class="chip-row md:flex-wrap">
                   <button v-for="d in dayChips" :key="d.day" type="button"
-                    :class="['btn', 'btn-sm', day === d.day ? 'btn-primary' : '']"
+                    :class="['btn', 'btn-sm', day === d.day ? 'btn-on' : '']"
                     @click="setDay(d.day)">{{ d.label }}</button>
                 </div>
               </div>
-              <div class="flex items-center gap-2">
+              <div class="flex items-center gap-2 md:ml-auto">
                 <span class="text-xs font-mono uppercase tracking-[0.16em] text-ink-dim">JUMP</span>
                 <div class="chip-row">
                   <button type="button" class="btn btn-sm" @click="jumpNow">NOW</button>
@@ -3084,7 +3084,7 @@ const EpgView = {
               <label class="field-label">SORT UNPINNED CHANNELS BY</label>
               <div class="chip-row">
                 <button v-for="s in sortOptions" :key="s.key" type="button"
-                  :class="['btn', 'btn-sm', sortDraft === s.key ? 'btn-primary' : '']"
+                  :class="['btn', 'btn-sm', sortDraft === s.key ? 'btn-on' : '']"
                   @click="sortDraft = s.key">{{ s.label }}</button>
               </div>
             </div>
