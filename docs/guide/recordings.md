@@ -32,6 +32,10 @@ The row can re-run an ad scan or cut on the file you've already downloaded, with
 
 A recording deleted from the Fetch box shows struck-through and dimmed (a tombstone), but its labels, buttons, and progress bar stay readable: a tombstoned recording is still on disk, so you can re-scan or re-cut it.
 
+## Failed rows
+
+A `failed` row that is no longer on the Fetch box has nothing left to clean up, so the row carries a delete button that removes it from Fetcharr's history. If the episode is still on the box, the next sync downloads it again and the row comes back. A row for an episode that is still recording has no delete button.
+
 ## Filters and time
 
 Filter by `ON FETCH` / `DELETED`; the `WHEN` filter adds `1H` / `24H` shortcuts for recent activity. Timestamps show in the container's timezone (`TZ`), whatever device you're browsing from.

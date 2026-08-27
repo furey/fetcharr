@@ -51,6 +51,7 @@ const DEV_CSRF_SECRET = 'dev-only-csrf-secret-set-CSRF_SECRET-in-prod'
 const CSRF_SECRET = process.env.CSRF_SECRET || DEV_CSRF_SECRET
 const DEFAULT_FETCH_PORT = 49152
 const AD_REMOVAL_MODES = ['off', 'detect', 'cut']
+const UNDOWNLOADED_STATUSES = ['failed', 'skipped']
 
 if (process.env.NODE_ENV === 'production' && CSRF_SECRET === DEV_CSRF_SECRET) {
   console.error(
@@ -274,7 +275,8 @@ app.delete('/api/recordings/:fetch_id', doubleCsrfProtection, async (req, res) =
   const fetchId = req.params.fetch_id
   const row = await db('recordings').where({ fetch_id: fetchId }).first()
   if (!row) return res.status(404).json({ error: 'recording not found' })
-  if (!row.deleted_from_fetch_at) {
+  const isUndownloaded = UNDOWNLOADED_STATUSES.includes(row.status)
+  if (!row.deleted_from_fetch_at && !isUndownloaded) {
     return res.status(409).json({ error: 'recording still on Fetch — delete from box first' })
   }
   await db('recordings')
