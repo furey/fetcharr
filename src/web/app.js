@@ -210,6 +210,7 @@ const DASHBOARD_POLL_MS = 30_000
 const SYNCS_POLL_MS = 30_000
 const RECORDINGS_POLL_MS = 60_000
 const RECORDINGS_ACTIVE_POLL_MS = 2_000
+const UNDOWNLOADED_STATUSES = ['failed', 'skipped']
 
 const parseHash = () => {
   const h = (window.location.hash || '').replace(/^#\/?/, '').toLowerCase()
@@ -1247,9 +1248,9 @@ const RecordingsView = {
                       <path d="M3 5h10M6.5 5V3h3v2M4.5 5l.7 8.5h5.6L11.5 5M6.5 7.5v4M9.5 7.5v4"/>
                     </svg>
                   </button>
-                  <button v-else-if="r.deleted_from_fetch_at" type="button" class="btn btn-sm btn-icon btn-danger"
+                  <button v-else-if="canRemove(r)" type="button" class="btn btn-sm btn-icon btn-danger"
                     @click="removeRecording(r)" :disabled="removingId === r.fetch_id"
-                    title="Remove this tombstone from Fetcharr's history.">
+                    :title="removeTitle(r)">
                     <span v-if="removingId === r.fetch_id">…</span>
                     <svg v-else viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                       <path d="M3 5h10M6.5 5V3h3v2M4.5 5l.7 8.5h5.6L11.5 5M6.5 7.5v4M9.5 7.5v4"/>
@@ -1283,7 +1284,7 @@ const RecordingsView = {
                 :progress="r.progress" :caption="progressCaption(r)" :bar="true"/>
               <progress-block v-if="isAdProgress(r)"
                 :progress="r.progress" :caption="progressCaption(r)" :bar="hasBar(r)"/>
-              <div v-if="canAdScan(r) || canDelete(r) || r.deleted_from_fetch_at" class="flex items-center justify-end gap-2 pt-1">
+              <div v-if="canAdScan(r) || canDelete(r) || canRemove(r)" class="flex items-center justify-end gap-2 pt-1">
                 <button v-if="canAdScan(r)" type="button" class="btn btn-sm btn-icon"
                   @click="adScan(r)" :disabled="adScanningId === r.fetch_id">
                   <span v-if="adScanningId === r.fetch_id">…</span>
@@ -1300,8 +1301,8 @@ const RecordingsView = {
                     <path d="M3 5h10M6.5 5V3h3v2M4.5 5l.7 8.5h5.6L11.5 5M6.5 7.5v4M9.5 7.5v4"/>
                   </svg>
                 </button>
-                <button v-else-if="r.deleted_from_fetch_at" type="button" class="btn btn-sm btn-icon btn-danger"
-                  @click="removeRecording(r)" :disabled="removingId === r.fetch_id">
+                <button v-else-if="canRemove(r)" type="button" class="btn btn-sm btn-icon btn-danger"
+                  @click="removeRecording(r)" :disabled="removingId === r.fetch_id" :title="removeTitle(r)">
                   <span v-if="removingId === r.fetch_id">…</span>
                   <svg v-else viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <path d="M3 5h10M6.5 5V3h3v2M4.5 5l.7 8.5h5.6L11.5 5M6.5 7.5v4M9.5 7.5v4"/>
@@ -1435,6 +1436,12 @@ const RecordingsView = {
 
     const canDelete = (r) => r.status === 'done' && !r.deleted_from_fetch_at
     const isRecording = (r) => r.status === 'skipped' && r.error === 'currently recording'
+    const canRemove = (r) => Boolean(r.deleted_from_fetch_at)
+      || (UNDOWNLOADED_STATUSES.includes(r.status) && !isRecording(r))
+    const removeTitle = (r) => (r.deleted_from_fetch_at
+      ? "Remove this tombstone from Fetcharr's history."
+      : "Remove this recording from Fetcharr's history."
+        + ' If it is still on the Fetch box, the next sync downloads it again.')
     const canAdScan = (r) => adRemovalEnabled.value && r.status === 'done'
 
     const adLabel = (status) => status.replace(/_/g, ' ')
@@ -1517,7 +1524,10 @@ const RecordingsView = {
     }
 
     const removeRecording = async (r) => {
-      if (!confirm(`Remove "${r.fetch_title}" from Fetcharr's history?`)) return
+      const note = r.deleted_from_fetch_at
+        ? ''
+        : '\n\nIf it is still on the Fetch box, the next sync downloads it again.'
+      if (!confirm(`Remove "${r.fetch_title}" from Fetcharr's history?${note}`)) return
       removingId.value = r.fetch_id
       try {
         await api('DELETE', `/api/recordings/${encodeURIComponent(r.fetch_id)}`)
@@ -1579,7 +1589,7 @@ const RecordingsView = {
       refresh, manualRefresh, canDelete, isRecording,
       canAdScan, adLabel, adTooltip, adScan,
       progressPhase, isAdProgress, hasBar, progressCaption,
-      deleteFromFetch, removeRecording, purgeDeleted,
+      deleteFromFetch, removeRecording, canRemove, removeTitle, purgeDeleted,
       setStatus, setShow, setSince, setDeleted, toggleSort, sortMarker,
       se: seasonEpisodeLabel, fmtBytes, fmtTime,
       flashText, flashKind,

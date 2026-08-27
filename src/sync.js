@@ -378,6 +378,7 @@ const upsertRecording = async ({ item, show, file_path, status, error }) => {
     size: item.size > 0 ? item.size : null,
     status,
     error,
+    purged_at: null,
   }
   const { fetch_id, ...mergeable } = payload
   await db('recordings')
