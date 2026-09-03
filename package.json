@@ -51,7 +51,7 @@
     "better-sqlite3": "^11.5.0",
     "cookie-parser": "^1.4.7",
     "csrf-csrf": "^3.0.6",
-    "express": "^4.19.2",
+    "express": "^5.2.1",
     "express-rate-limit": "^7.4.0",
     "fast-xml-parser": "^4.5.5",
     "fetchtv": "1.8.2",
