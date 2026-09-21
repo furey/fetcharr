@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <strong>Sync Fetch TV PVR recordings into Plex.</strong><br/>
+  <strong>Retired. Sync Fetch TV PVR recordings into Plex.</strong><br/>
   A self-hosted bridge for Australian Fetch TV DVB-T set-top boxes.
 </p>
 
@@ -19,6 +19,10 @@
 <p align="center">
   <a href="https://furey.github.io/fetcharr/"><strong>Read the documentation →</strong></a>
 </p>
+
+> [!IMPORTANT]<br>
+> Fetcharr is retired and archived. On `2026-09-21` Fetch TV announced a [Gen 3 Extended Service Levy](https://news.fetchtv.com.au/extended-service-levy-1): owners of a Mini Gen 3 or Mighty Gen 3 box with no subscription are charged `$29.99` to keep the box working until `31 October 2027`, auto-charged to the card on file on `1 November 2026` unless they act by `31 October 2026`, and a suspended Mighty Gen 3 account loses the ability to make or view recordings. The alternative Fetch offers is a new box plus a `$4.99`/month Fetch Access subscription. Fetch's guide and scheduling APIs are cloud-only and the box doesn't use the free over-the-air guide, so a tool bound to Fetch has no future. The successor is [freetvarr](https://github.com/furey/freetvarr): the same app, recording free-to-air with an HDHomeRun tuner and TVHeadend, no subscription, no levy.
+> Still on a Fetch box? Use [fetchtv](https://github.com/furey/fetchtv) to copy your recordings off before `1 November 2026`.
 
 ## Contents
 
