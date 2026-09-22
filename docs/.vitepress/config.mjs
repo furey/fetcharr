@@ -7,7 +7,7 @@ const site = 'https://furey.github.io/fetcharr/'
 export default withMermaid(defineConfig({
   base: '/fetcharr/',
   lang: 'en-AU',
-  title: 'fetcharr',
+  title: 'Fetcharr',
   description:
     'Sync Fetch TV PVR recordings into Plex. A self-hosted bridge for Australian Fetch TV DVB-T set-top boxes.',
   appearance: 'dark',
@@ -36,15 +36,15 @@ export default withMermaid(defineConfig({
     ['meta', { name: 'theme-color', content: '#1a1611' }],
     ['meta', { name: 'color-scheme', content: 'dark' }],
     ['meta', { property: 'og:type', content: 'website' }],
-    ['meta', { property: 'og:site_name', content: 'fetcharr' }],
-    ['meta', { property: 'og:title', content: 'fetcharr' }],
+    ['meta', { property: 'og:site_name', content: 'Fetcharr' }],
+    ['meta', { property: 'og:title', content: 'Fetcharr' }],
     ['meta', { property: 'og:description', content: 'Sync Fetch TV PVR recordings into Plex.' }],
     ['meta', { property: 'og:url', content: site }],
     ['meta', { name: 'twitter:card', content: 'summary' }]
   ],
 
   themeConfig: {
-    siteTitle: 'fetcharr',
+    siteTitle: 'Fetcharr',
 
     nav: [
       { text: 'Guide', link: '/guide/', activeMatch: '/guide/' },

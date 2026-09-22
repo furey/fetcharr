@@ -30,7 +30,7 @@ flowchart TB
     plex["Plex Media Server"]
     browser["Browser<br>Vue 3 SPA"]
 
-    subgraph fetcharr["fetcharr container"]
+    subgraph fetcharr["Fetcharr container"]
       server["Express server<br>REST API + static UI"]
       sched["Scheduler<br>node-cron"]
       sync["Sync engine"]
@@ -105,7 +105,7 @@ The original plan was UPnP `DestroyObject` from upstream [`fetchtv`](https://git
 
 The only working deletion path is Fetch's cloud APIs (HTTPS auth + WebSocket to `messages.fetchtv.com.au` with the user's activation code + PIN; see [`pyfetchtv`](https://github.com/jinxo13/pyfetchtv) for the reference implementation).
 
-A delete runs these steps: authenticate, open the WebSocket, send `ARE_YOU_ALIVE` and wait for `I_AM_ALIVE` (which carries the box's recording library, needed to translate fetcharr's stored DLNA id to the cloud-side id the delete API expects), then send the soft-delete envelope and wait for the ack. The handshake step has a known failure mode: the `I_AM_ALIVE` reply comes from the box itself via the cloud relay, and a box whose own cloud session has gone idle misses the ping even while it answers UPnP on the LAN. `ARE_YOU_ALIVE` is sent queueable, so the first attempt usually wakes the session; fetcharr also sends a `WAKE_STB` command between attempts (the protocol's explicit wake, the same mechanism the official app uses) and retries three times (3 × 10 s) before failing with a retry-shortly error. Each cloud-delete failure is logged with its stage (`handshake`, `translate`, `ack`, …) so `docker logs` shows what the browser saw. If the handshake keeps timing out, verify the box is visible in the official Fetch mobile app (same cloud path); if the app can't see it either, the box↔cloud session is down and a box restart usually resets it.
+A delete runs these steps: authenticate, open the WebSocket, send `ARE_YOU_ALIVE` and wait for `I_AM_ALIVE` (which carries the box's recording library, needed to translate Fetcharr's stored DLNA id to the cloud-side id the delete API expects), then send the soft-delete envelope and wait for the ack. The handshake step has a known failure mode: the `I_AM_ALIVE` reply comes from the box itself via the cloud relay, and a box whose own cloud session has gone idle misses the ping even while it answers UPnP on the LAN. `ARE_YOU_ALIVE` is sent queueable, so the first attempt usually wakes the session; Fetcharr also sends a `WAKE_STB` command between attempts (the protocol's explicit wake, the same mechanism the official app uses) and retries three times (3 × 10 s) before failing with a retry-shortly error. Each cloud-delete failure is logged with its stage (`handshake`, `translate`, `ack`, …) so `docker logs` shows what the browser saw. If the handshake keeps timing out, verify the box is visible in the official Fetch mobile app (same cloud path); if the app can't see it either, the box↔cloud session is down and a box restart usually resets it.
 
 ## Ad removal
 
@@ -369,7 +369,7 @@ The wider sync flow (DB transitions, `downloadFile` invocation, Plex notify) is 
 The PNGs under `docs/img/` are captured from the running app by `scripts/capture-screenshots.sh`. The script pulls the official Playwright Docker image (no host install required), drives headless Chromium across all five tabs at desktop width plus Dashboard/Shows/Recordings at a 390×844 mobile viewport (`screenshot-mobile-*.png`), and writes the screenshots back into `docs/img/` with the right ownership.
 
 ```sh
-# fetcharr container must be up + reachable at $FETCHARR_URL (default http://localhost:8124)
+# Fetcharr container must be up + reachable at $FETCHARR_URL (default http://localhost:8124)
 ./scripts/capture-screenshots.sh
 
 # Re-shoot a single tab (dashboard, shows, syncs, recordings, settings):
@@ -397,7 +397,7 @@ One VitePress quirk: the `> [!NOTE]` alert convention in these files carries a t
 The demo clip on the docs home page and in the README is generated, not hand-recorded, by the same Playwright-in-Docker approach as the screenshots. `scripts/capture-walkthrough.sh` drives a scripted cursor tour of the tabs, then ffmpeg on the host encodes it:
 
 ```sh
-# fetcharr must be up + reachable at $FETCHARR_URL (default http://localhost:8124)
+# Fetcharr must be up + reachable at $FETCHARR_URL (default http://localhost:8124)
 ./scripts/capture-walkthrough.sh
 ```
 

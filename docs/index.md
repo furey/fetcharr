@@ -2,7 +2,7 @@
 layout: home
 
 hero:
-  name: fetcharr
+  name: Fetcharr
   text: >-
     Fetch TV recordings in&nbsp;Plex, ad&nbsp;free.<span style="font-size:0.8em;position:relative;line-height:0;top:-0.2em;left:-0.2em;">*</span>
   tagline: >-
@@ -13,7 +13,7 @@ hero:
     via <code>comskip</code></span>
   image:
     src: /logo.svg
-    alt: fetcharr
+    alt: Fetcharr
   actions:
     - theme: brand
       text: Get started

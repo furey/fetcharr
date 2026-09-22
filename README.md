@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/img/logo.svg" alt="fetcharr" width="240"/>
+  <img src="docs/img/logo.svg" alt="Fetcharr" width="240"/>
 </p>
 
 <p align="center">

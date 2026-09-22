@@ -1,4 +1,4 @@
-# Plainify lexicon — fetcharr
+# Plainify lexicon — Fetcharr
 
 Jargon-to-plain decisions for this project. Read before a run, extend after.
 The docs site is split: `guide/` pages and the repo `README.md` are `docs`
